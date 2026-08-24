@@ -258,8 +258,13 @@
     let width = naturalWidth;
     let height = width * aspect;
     if (height > availableHeight) {
-      height = availableHeight;
-      width = height / aspect;
+      // 세로로 긴(가로폭이 좁은) 구역을 세로 높이에만 딱 맞추면 가로 폭이 너무 좁아져
+      // 보이는 면적 자체가 작아진다. 가로 폭은 최소한 화면 가로폭의 60%는 확보하고,
+      // 그래도 남는 세로 길이는 화면(페이지) 스크롤로 보게 한다.
+      const minWidth = naturalWidth * 0.6;
+      const heightCappedWidth = availableHeight / aspect;
+      width = Math.max(heightCappedWidth, minWidth);
+      height = width * aspect;
       el.mapStage.style.width = `${Math.round(width)}px`;
       el.mapStage.style.margin = '0 auto';
     }
