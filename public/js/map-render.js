@@ -48,14 +48,14 @@ function clamp(v, min, max) {
 
 // 부스 크기가 작아져도 테두리가 번호 표시 공간을 다 잡아먹지 않도록,
 // 테두리 두께/모서리 반경/글자 크기를 부스 크기(작은 변 기준)에 비례해 함께 줄인다.
-// 글자 크기는 상세구역에서도 번호가 잘 보이도록 넉넉하게(최대 3.4) 키워뒀다.
+// 글자 크기는 작은 부스(1~2 크기대)에서도 번호가 잘 보이도록 최소 크기를 넉넉하게 잡았다.
 function boothMarkerMetrics(w, h) {
   const size = Math.min(w, h);
   return {
     strokeWidth: clamp(size * 0.067, 0.06, 0.4),
     ringStrokeWidth: clamp(size * 0.083, 0.08, 0.5),
     rx: clamp(size * 0.133, 0.15, 0.8),
-    fontSize: clamp(size * 0.5, 0.9, 3.4),
+    fontSize: clamp(size * 0.6, 1.3, 3.6),
   };
 }
 
