@@ -1,0 +1,336 @@
+.map-stage {
+  position: relative;
+  width: 100%;
+  background: #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+}
+.map-stage img.floorplan {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.map-stage .map-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.map-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.route-line {
+  stroke: #ef4444;
+  stroke-width: 0.6;
+  stroke-dasharray: 2 1.4;
+  fill: none;
+  opacity: 0.9;
+}
+
+.entrance-marker circle { fill: #1a7f37; stroke: white; stroke-width: 0.4; }
+.entrance-marker text { fill: white; font-size: 2.6px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+
+/* 테두리 두께/글자 크기는 부스 크기에 비례해 map-render.js가 각 요소에 직접 지정한다
+   (부스가 작아져도 테두리가 번호 표시 공간을 다 차지하지 않도록). 여기서는 stroke-width/
+   font-size를 지정하지 않아야 그 값이 우선 적용된다. */
+.booth-marker rect.ring { fill: none; stroke: none; }
+.booth-marker rect.box { fill: #1f6feb; stroke: white; transition: fill 0.15s; }
+.booth-marker text { fill: white; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.booth-marker { cursor: pointer; }
+
+.booth-marker.selected rect.box { stroke: #f59e0b; }
+
+/* 설치/온보딩 진행 상태(뒤에 나오는 A/S 발생 표시가 항상 우선하도록 이 규칙들을 먼저 둔다) */
+.booth-marker.marker--onboarding rect.box { fill: #f59e0b; }
+.booth-marker.marker--installed rect.box { fill: #1a7f37; }
+
+.booth-marker.marker--alert rect.box {
+  fill: #dc2626;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: booth-siren-color 0.5s steps(1, end) infinite, booth-siren-pulse 0.5s ease-in-out infinite;
+}
+.booth-marker.marker--alert rect.ring {
+  fill: none;
+  stroke: #dc2626;
+  opacity: 0.8;
+  animation: booth-ring 0.9s ease-out infinite;
+}
+
+@keyframes booth-siren-color {
+  0%, 49% { fill: #dc2626; }
+  50%, 100% { fill: #f59e0b; }
+}
+@keyframes booth-siren-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.22); }
+}
+@keyframes booth-ring {
+  0% { transform: scale(1); opacity: 0.85; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.booth-marker.editor-mode.dragging rect.box { fill: #f59e0b; }
+
+.map-stage.zoomable {
+  overflow: auto;
+  max-height: 72vh;
+}
+.map-stage .map-canvas {
+  position: relative;
+  height: 100%;
+  line-height: 0;
+  transform-origin: 0 0;
+}
+.map-stage .map-canvas img.floorplan { width: 100%; height: auto; display: block; }
+
+.map-stage.zoom-active {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 구역 상세 배치도가 아직 없을 때, 전체 배치도에서 그 구역 영역만 잘라 확대해 보여주는 미리보기 */
+.map-canvas.cropped { overflow: hidden; }
+.map-canvas.cropped img.floorplan { position: absolute; max-width: none; }
+.map-stage.cropped img.floorplan { position: absolute; max-width: none; }
+/* 미리보기는 실제 구역 범위보다 살짝 넓게 보여주므로, 실제 구역 경계를 점선으로 표시해 구분한다 */
+.map-canvas.cropped .map-overlay,
+.map-stage.cropped .map-overlay {
+  outline: 1px dashed rgba(31, 111, 235, 0.55);
+  outline-offset: -1px;
+}
+
+.zoom-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.zoom-toolbar .zoom-level { font-size: 0.85rem; color: #6b7280; min-width: 48px; text-align: center; }
+
+.zone-hotspot { cursor: pointer; }
+.zone-hotspot rect {
+  fill: rgba(31, 111, 235, 0.1);
+  stroke: #1f6feb;
+  stroke-width: 0.4;
+  stroke-dasharray: 1.4 1;
+}
+.zone-hotspot:hover rect { fill: rgba(31, 111, 235, 0.22); }
+.zone-hotspot text {
+  fill: #1f6feb;
+  font-size: 2.6px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+/* 구역 안에 A/S가 발생하면, 전체 배치도 위 그 구역 영역 자체를 반투명 빨간색으로 깜빡여 표시한다 */
+.zone-hotspot.has-alert rect {
+  stroke: #dc2626;
+  stroke-dasharray: none;
+  animation: zone-hotspot-blink 1s ease-in-out infinite;
+}
+.zone-hotspot.has-alert text { fill: #dc2626; }
+@keyframes zone-hotspot-blink {
+  0%, 100% { fill: rgba(220, 38, 38, 0.12); }
+  50% { fill: rgba(220, 38, 38, 0.38); }
+}
+
+.zone-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.zone-tabs button { background: #f0f4f9; color: #374151; padding: 6px 14px; font-size: 0.85rem; }
+.zone-tabs button.active { background: #1f6feb; color: white; }
+.zone-tabs button.has-alert { animation: zone-tab-blink 1s ease-in-out infinite; }
+@keyframes zone-tab-blink {
+  0%, 100% { background: #fde2e2; color: #b91c1c; }
+  50% { background: #dc2626; color: white; }
+}
+.zone-tabs button.add-zone { background: none; border: 1px dashed #9ca3af; color: #6b7280; }
+.tab-alert-badge {
+  display: inline-block;
+  background: #dc2626;
+  color: white;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.today-staff-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #fff8e6;
+  border: 1px solid #f5deb3;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+.today-staff-panel .staff-row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.today-staff-panel .staff-zone { font-weight: 700; color: #92650a; min-width: 64px; }
+.today-staff-panel .staff-empty { color: #9ca3af; }
+
+.active-as-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+.active-as-banner strong { color: #b91c1c; }
+.active-as-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.active-as-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: white;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.active-as-chip:hover { background: #fee2e2; }
+
+.select-box {
+  position: absolute;
+  border: 1px dashed #1f6feb;
+  background: rgba(31, 111, 235, 0.12);
+  pointer-events: none;
+}
+
+.batch-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: #eef4ff;
+  border: 1px solid #cfe0fb;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+.batch-panel .batch-divider {
+  width: 1px;
+  align-self: stretch;
+  background: #cfe0fb;
+}
+
+.install-select-all-row {
+  display: block;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.install-booth-checklist {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+.install-booth-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.88rem;
+  border-bottom: 1px solid #f0f2f5;
+}
+.install-booth-checklist label:last-child { border-bottom: none; }
+.install-booth-checklist .install-status-tag {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+#popover-install-status:not(:empty) {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f2f5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+.install-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: white;
+}
+.install-status-badge.onboarding_needed { background: #f59e0b; }
+.install-status-badge.installed { background: #1a7f37; }
+.batch-panel input[type="number"] {
+  width: 70px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.issue-popover {
+  position: fixed;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  padding: 14px;
+  width: 240px;
+  z-index: 50;
+  transform: translate(-50%, -100%);
+  margin-top: -12px;
+}
+.issue-popover h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.issue-popover .store-info-toggle-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  padding: 5px 8px;
+}
+.issue-popover #popover-store-info:not(:empty) {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.issue-popover .store-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 2px 0;
+}
+.issue-popover .store-info-label { color: #6b7280; flex-shrink: 0; }
+.issue-popover .open-alert-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 0.85rem;
+}
+.issue-popover .issue-type-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.issue-popover .issue-type-list button { text-align: left; }
+.issue-popover .close-btn { position: absolute; top: 8px; right: 10px; background: none; color: #6b7280; padding: 0; font-size: 1.1rem; }
+
+.legend { display: flex; gap: 16px; align-items: center; margin-top: 10px; font-size: 0.8rem; color: #6b7280; flex-wrap: wrap; }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+.legend-dot.entrance { background: #1a7f37; }
+.legend-dot.normal { background: #1f6feb; }
+.legend-dot.onboarding { background: #f59e0b; }
+.legend-dot.installed { background: #1a7f37; }
+.legend-dot.alert { background: #dc2626; }
+
+.event-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
+.booth-list-table td.num { font-weight: 600; }

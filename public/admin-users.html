@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>계정 관리 - 부스 A/S 알림 지도</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>부스 A/S 알림 지도</h1>
+    <nav>
+      <a href="/map.html">지도</a>
+      <a href="/editor.html">배치도 관리</a>
+      <a href="/admin-users.html" class="active">계정 관리</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span id="me-name"></span>
+    <button class="link-btn" id="logout-btn">로그아웃</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="box">
+    <h2>새 계정 만들기</h2>
+    <div class="inline-form">
+      <input type="text" id="new-username" placeholder="아이디" />
+      <input type="password" id="new-password" placeholder="비밀번호(8자 이상)" />
+      <input type="text" id="new-displayname" placeholder="표시 이름" />
+      <select id="new-role">
+        <option value="user">일반</option>
+        <option value="admin">관리자</option>
+      </select>
+      <button id="create-user-btn">계정 만들기</button>
+    </div>
+    <p class="status-msg" id="create-user-status"></p>
+  </div>
+
+  <div class="box" style="margin-top:24px;">
+    <h2>계정 목록</h2>
+    <div class="scroll-box">
+      <table>
+        <thead><tr><th>아이디</th><th>표시 이름</th><th>권한</th><th></th></tr></thead>
+        <tbody id="user-list-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:24px;">
+    <h2>oct-portal 계정 가져오기</h2>
+    <p style="font-size:0.85rem;color:#6b7280;margin-top:-6px;">
+      oct-portal(field-file-portal)의 <code>data/users.json</code> 내용을 그대로 붙여넣으면,
+      기존 비밀번호 그대로 로그인할 수 있는 계정이 일괄 등록됩니다(이미 있는 아이디는 건너뜁니다).
+      두 시스템이 실시간으로 연결되는 것은 아니므로, 계정이 추가/변경될 때마다 다시 붙여넣어 가져와야 합니다.
+    </p>
+    <textarea id="import-json" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:10px;border:1px solid #d1d5db;border-radius:6px;" placeholder='[{"username":"...","passwordHash":"...","displayName":"...","role":"user"}, ...]'></textarea>
+    <div style="margin-top:10px;">
+      <button id="import-btn">가져오기</button>
+    </div>
+    <p class="status-msg" id="import-status"></p>
+  </div>
+</div>
+
+<script src="admin-users.js"></script>
+</body>
+</html>

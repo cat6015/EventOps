@@ -1,0 +1,6 @@
+node_modules/
+uploads/floorplans/*
+!uploads/floorplans/.gitkeep
+data/*.json
+data/sessions/
+.env

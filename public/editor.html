@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>배치도 관리 - 부스 A/S 알림 지도</title>
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/map.css" />
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>부스 A/S 알림 지도</h1>
+    <nav>
+      <a href="/map.html">지도</a>
+      <a href="/editor.html" class="active">배치도 관리</a>
+      <a href="/admin-users.html">계정 관리</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span id="me-name"></span>
+    <button class="link-btn" id="logout-btn">로그아웃</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="box-row">
+    <div class="box">
+      <h2>행사 목록</h2>
+      <div class="event-picker">
+        <select id="event-select"></select>
+        <select id="event-status-select">
+          <option value="active">진행중</option>
+          <option value="archived">종료</option>
+        </select>
+        <button class="secondary" id="set-default-event-btn">지도 화면 기본 행사로 설정</button>
+        <button class="danger" id="delete-event-btn">이 행사 삭제</button>
+      </div>
+      <div class="inline-form">
+        <input type="text" id="new-event-name" placeholder="새 행사 이름" />
+        <input type="date" id="new-event-date" />
+        <button id="create-event-btn">새 행사 만들기</button>
+      </div>
+      <p class="status-msg" id="event-status-msg"></p>
+    </div>
+
+    <div class="box" id="floorplan-box" hidden>
+      <h2>배치도 이미지</h2>
+      <div class="inline-form">
+        <input type="file" id="floorplan-file" accept="image/*" />
+        <button id="floorplan-upload-btn">업로드</button>
+      </div>
+      <p class="status-msg" id="floorplan-status"></p>
+    </div>
+  </div>
+
+  <div class="box" id="map-box" style="margin-top:24px;" hidden>
+    <h2>부스 배치</h2>
+    <p class="status-msg">행사 규모가 커서 구역을 나눠 관리하려면 '구역 추가 모드'로 전체 배치도 위에 영역을 지정해 구역별 상세 배치도를 별도로 관리할 수 있습니다.</p>
+    <div class="zone-tabs" id="zone-tabs"></div>
+    <div class="inline-form" id="zone-manage-bar" hidden>
+      <button class="secondary" id="zone-resize-btn">이 구역 영역(크기/위치) 재설정</button>
+      <button class="secondary" id="zone-fix-booth-size-btn" title="전체 배치도에서 이 구역으로 옮겨진 부스가 너무 작거나 크게 보이면 사용하세요">이 구역 부스 크기 재계산</button>
+      <button class="danger" id="zone-delete-btn">이 구역 삭제</button>
+    </div>
+
+    <div id="zone-floorplan-box" hidden>
+      <div class="inline-form">
+        <input type="file" id="zone-floorplan-file" accept="image/*" />
+        <button id="zone-floorplan-upload-btn">이 구역의 상세 배치도 업로드</button>
+      </div>
+      <p class="status-msg" id="zone-floorplan-status"></p>
+    </div>
+
+    <div id="map-editor-area" hidden>
+      <p class="status-msg" id="zone-crop-hint" hidden>이 구역의 상세 배치도가 아직 없어 전체 배치도에서 이 구역 영역을 확대해서 보여드리는 중입니다. 정확한 배치도를 쓰려면 위에서 상세 배치도를 업로드해주세요.</p>
+      <div class="inline-form">
+        <button class="secondary" id="mode-select-btn">선택/이동 모드</button>
+        <button class="secondary" id="mode-add-btn">부스 추가 모드</button>
+        <button class="secondary" id="mode-grid-btn">부스 자동 추가 모드</button>
+        <button class="secondary" id="mode-zone-btn">구역 추가 모드</button>
+        <button class="secondary" id="mode-entrance-btn">입구 설정 모드</button>
+        <span id="mode-hint" class="status-msg"></span>
+      </div>
+      <div class="zoom-toolbar">
+        <button class="secondary" id="zoom-out-btn">－</button>
+        <span class="zoom-level" id="zoom-level">100%</span>
+        <button class="secondary" id="zoom-in-btn">＋</button>
+        <button class="secondary" id="zoom-reset-btn">화면 맞춤</button>
+        <span class="status-msg">Ctrl+휠로 확대/축소(50%~500%), 휠로 화면 이동</span>
+      </div>
+      <div class="batch-panel" id="batch-panel" hidden>
+        <strong id="batch-count">0개 선택됨</strong>
+        <label>가로(%) <input type="number" id="batch-width" min="0.5" max="100" step="0.5" /></label>
+        <label>세로(%) <input type="number" id="batch-height" min="0.5" max="100" step="0.5" /></label>
+        <button id="batch-apply-btn">크기 일괄 적용</button>
+        <span class="batch-divider"></span>
+        <button class="secondary" id="align-left-btn" title="맨 왼쪽 부스 기준 좌측 라인 정렬(2개 이상)">좌측 정렬</button>
+        <button class="secondary" id="align-right-btn" title="맨 오른쪽 부스 기준 우측 라인 정렬(2개 이상)">우측 정렬</button>
+        <button class="secondary" id="align-top-btn" title="맨 위 부스 기준 상단 라인 정렬(2개 이상)">상단 정렬</button>
+        <button class="secondary" id="align-bottom-btn" title="맨 아래 부스 기준 하단 라인 정렬(2개 이상)">하단 정렬</button>
+        <button class="secondary" id="distribute-h-btn" title="맨 왼쪽/오른쪽 부스 기준 가로 간격 균등 정렬(3개 이상)">가로 간격 정렬</button>
+        <button class="secondary" id="distribute-v-btn" title="맨 위/아래 부스 기준 세로 간격 균등 정렬(3개 이상)">세로 간격 정렬</button>
+        <span class="batch-divider"></span>
+        <button class="danger" id="batch-delete-btn">선택 삭제</button>
+        <button class="secondary" id="batch-clear-btn">선택 해제</button>
+      </div>
+      <div class="map-stage zoomable" id="map-stage">
+        <div class="map-empty" id="map-empty">배치도를 먼저 업로드해주세요.</div>
+        <div class="map-canvas" id="map-canvas">
+          <img class="floorplan" id="floorplan-img" hidden />
+          <svg class="map-overlay" id="map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" hidden></svg>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="legend-dot entrance"></span>입구</span>
+        <span><span class="legend-dot normal"></span>부스</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="box" id="import-box" style="margin-top:24px;" hidden>
+    <h2>매장정보 엑셀 일괄 등록</h2>
+    <p class="status-msg">부스번호로 매칭해 매장명/사업자번호/고유번호/온보딩용핸드폰번호/VAN을 채워 넣습니다. 일치하는 부스가 없으면 위치 미지정 상태로 새 부스를 만듭니다.</p>
+    <div class="inline-form">
+      <button class="secondary" id="import-template-btn">양식 다운로드</button>
+      <input type="file" id="import-file" accept=".xlsx,.xls" />
+      <button id="import-upload-btn">업로드</button>
+    </div>
+    <p class="status-msg" id="import-status"></p>
+  </div>
+
+  <div class="box" id="booth-list-box" style="margin-top:24px;" hidden>
+    <h2>부스 목록</h2>
+    <div class="scroll-box">
+      <table class="booth-list-table">
+        <thead><tr><th>번호</th><th>매장명</th><th>구역</th><th>위치(x%, y%)</th><th></th></tr></thead>
+        <tbody id="booth-list-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="box" id="assignment-box" style="margin-top:24px;" hidden>
+    <h2>날짜별 담당자 배정</h2>
+    <div class="inline-form">
+      <input type="date" id="assign-date" />
+      <select id="assign-zone-select"><option value="">전체(공통)</option></select>
+      <select id="assign-user-select"></select>
+      <input type="text" id="assign-phone" placeholder="연락처(선택)" />
+      <input type="text" id="assign-note" placeholder="메모(선택)" />
+      <button id="assign-create-btn">배정</button>
+    </div>
+    <p class="status-msg" id="assign-status"></p>
+    <div class="scroll-box">
+      <table class="booth-list-table">
+        <thead><tr><th>날짜</th><th>구역</th><th>담당자</th><th>연락처</th><th>메모</th><th></th></tr></thead>
+        <tbody id="assignment-list-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="booth-modal" hidden>
+  <div class="modal-card">
+    <h2 id="booth-modal-title">새 부스</h2>
+    <div class="stacked-form">
+      <label>부스 번호 <input type="text" id="booth-modal-number" /></label>
+      <label>가로 크기(%) <input type="number" id="booth-modal-width" min="0.5" max="100" step="0.5" /></label>
+      <label>세로 크기(%) <input type="number" id="booth-modal-height" min="0.5" max="100" step="0.5" /></label>
+      <label>매장명 <input type="text" id="booth-modal-store-name" /></label>
+      <label>사업자번호 <input type="text" id="booth-modal-business-number" /></label>
+      <label>고유번호 <input type="text" id="booth-modal-corp-number" /></label>
+      <label>온보딩용 핸드폰번호 <input type="text" id="booth-modal-onboarding-contact" /></label>
+      <label>VAN <input type="text" id="booth-modal-van" /></label>
+    </div>
+    <p class="error" id="booth-modal-error"></p>
+    <div class="modal-actions">
+      <button class="danger" id="booth-modal-delete" hidden>삭제</button>
+      <button class="secondary" id="booth-modal-cancel">취소</button>
+      <button id="booth-modal-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="grid-modal" hidden>
+  <div class="modal-card">
+    <h2>부스 자동 추가</h2>
+    <div class="stacked-form">
+      <label>행(가로줄) 수 <input type="number" id="grid-rows" min="1" max="50" step="1" value="1" /></label>
+      <label>열(세로줄) 수 <input type="number" id="grid-cols" min="1" max="50" step="1" value="1" /></label>
+      <label>생성할 부스 개수 <input type="number" id="grid-count" min="1" step="1" value="1" /></label>
+      <label>번호 접두어 <input type="text" id="grid-prefix" placeholder="예: A-" /></label>
+      <label>시작 번호 <input type="number" id="grid-start" min="0" step="1" value="1" /></label>
+      <label>번호 자릿수 <input type="number" id="grid-pad" min="1" max="5" step="1" value="2" /></label>
+      <label>부스 간격(%) <input type="number" id="grid-gap" min="0" max="20" step="0.5" value="1" /></label>
+      <p class="status-msg" id="grid-count-hint"></p>
+    </div>
+    <p class="error" id="grid-modal-error"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="grid-modal-cancel">취소</button>
+      <button id="grid-modal-save">일괄 생성</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="zone-modal" hidden>
+  <div class="modal-card">
+    <h2>구역 추가</h2>
+    <div class="stacked-form">
+      <label>구역 이름 <input type="text" id="zone-modal-name" placeholder="예: A홀" /></label>
+    </div>
+    <p class="error" id="zone-modal-error"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="zone-modal-cancel">취소</button>
+      <button id="zone-modal-save">구역 만들기</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/map-render.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>부스 지도 - 부스 A/S 알림 지도</title>
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/map.css" />
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>부스 A/S 알림 지도</h1>
+    <nav>
+      <a href="/map.html" class="active">지도</a>
+      <a href="/editor.html" id="nav-editor" hidden>배치도 관리</a>
+      <a href="/admin-users.html" id="nav-users" hidden>계정 관리</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span id="me-name"></span>
+    <button class="link-btn" id="logout-btn">로그아웃</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="box">
+    <div class="event-picker">
+      <label for="event-select">행사 선택</label>
+      <select id="event-select"></select>
+      <button class="secondary" id="install-start-btn" hidden>설치시작</button>
+    </div>
+
+    <div class="today-staff-panel" id="today-staff-panel" hidden></div>
+    <div class="zone-tabs" id="zone-tabs"></div>
+    <div class="active-as-banner" id="active-as-banner" hidden>
+      <strong>진행중인 A/S</strong>
+      <div class="active-as-list" id="active-as-list"></div>
+    </div>
+
+    <div class="zoom-toolbar">
+      <button class="secondary" id="zoom-out-btn">－</button>
+      <span class="zoom-level" id="zoom-level">100%</span>
+      <button class="secondary" id="zoom-in-btn">＋</button>
+      <button class="secondary" id="zoom-reset-btn">화면 맞춤</button>
+      <span class="status-msg">두 손가락으로 확대/축소하거나 Ctrl+휠을 사용하세요</span>
+    </div>
+    <div class="map-stage" id="map-stage">
+      <div class="map-empty" id="map-empty">행사를 선택해주세요.</div>
+      <div class="map-canvas" id="map-canvas">
+        <img class="floorplan" id="floorplan-img" hidden />
+        <svg class="map-overlay" id="map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" hidden></svg>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="legend-dot entrance"></span>입구</span>
+      <span><span class="legend-dot normal"></span>정상 부스</span>
+      <span><span class="legend-dot onboarding"></span>온보딩 필요</span>
+      <span><span class="legend-dot installed"></span>설치완료</span>
+      <span><span class="legend-dot alert"></span>A/S 필요</span>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:24px;">
+    <h2>A/S 등록</h2>
+    <div class="inline-form">
+      <select id="report-booth-select"></select>
+      <select id="report-issue-select"></select>
+      <input type="text" id="report-note" placeholder="메모(선택, 기타 유형에 권장)" />
+      <button id="report-submit">AS발생 등록</button>
+    </div>
+    <p class="status-msg" id="report-status"></p>
+  </div>
+
+  <div class="box" style="margin-top:24px;">
+    <h2>진행중인 A/S <span id="open-count"></span></h2>
+    <div class="scroll-box">
+      <table>
+        <thead>
+          <tr><th>부스</th><th>유형</th><th>메모</th><th>등록자</th><th>등록시각</th><th></th></tr>
+        </thead>
+        <tbody id="open-alerts-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:24px;">
+    <h2>최근 처리 이력</h2>
+    <div class="scroll-box">
+      <table>
+        <thead>
+          <tr><th>부스</th><th>유형</th><th>처리내용</th><th>등록자</th><th>처리자</th><th>처리시각</th></tr>
+        </thead>
+        <tbody id="resolved-alerts-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="resolve-modal" hidden>
+  <div class="modal-card">
+    <h2>A/S 처리완료</h2>
+    <div class="stacked-form">
+      <label>처리내용 <select id="resolve-modal-type"></select></label>
+      <label>메모(선택) <input type="text" id="resolve-modal-note" /></label>
+    </div>
+    <p class="error" id="resolve-modal-error"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="resolve-modal-cancel">취소</button>
+      <button id="resolve-modal-save">처리완료</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="install-start-modal" hidden>
+  <div class="modal-card">
+    <h2>설치시작 - 대상 부스 선택</h2>
+    <label class="install-select-all-row">
+      <input type="checkbox" id="install-select-all" /> 전체 선택
+    </label>
+    <div class="scroll-box install-booth-checklist" id="install-booth-checklist"></div>
+    <p class="error" id="install-start-modal-error"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="install-start-modal-cancel">취소</button>
+      <button id="install-start-modal-save">설치시작</button>
+    </div>
+  </div>
+</div>
+
+<div class="issue-popover" id="issue-popover" hidden>
+  <button class="close-btn" id="popover-close">×</button>
+  <h3 id="popover-title"></h3>
+  <button type="button" class="secondary store-info-toggle-btn" id="popover-store-info-toggle" hidden>매장정보 보기</button>
+  <div id="popover-store-info" hidden></div>
+  <div id="popover-install-status"></div>
+  <div id="popover-open-list"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/map-render.js"></script>
+<script src="map.js"></script>
+</body>
+</html>
