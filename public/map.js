@@ -258,13 +258,8 @@
     let width = naturalWidth;
     let height = width * aspect;
     if (height > availableHeight) {
-      // 세로로 긴(가로폭이 좁은) 구역을 세로 높이에만 딱 맞추면 가로 폭이 너무 좁아져
-      // 보이는 면적 자체가 작아진다. 가로 폭은 최소한 화면 가로폭의 60%는 확보하고,
-      // 그래도 남는 세로 길이는 화면(페이지) 스크롤로 보게 한다.
-      const minWidth = naturalWidth * 0.6;
-      const heightCappedWidth = availableHeight / aspect;
-      width = Math.max(heightCappedWidth, minWidth);
-      height = width * aspect;
+      height = availableHeight;
+      width = height / aspect;
       el.mapStage.style.width = `${Math.round(width)}px`;
       el.mapStage.style.margin = '0 auto';
     }
@@ -425,12 +420,35 @@
   // 계산에는 영향이 없다 — 이 미리보기 자체가 곧 그 구역의 0~100 좌표계다.
   function applyZoneCropFallback(overviewPath, rect) {
     el.mapStage.classList.add('cropped');
-    const view = window.MapRender.expandRectForPreview(rect);
 
     function place() {
       const naturalW = el.floorplanImg.naturalWidth;
       const naturalH = el.floorplanImg.naturalHeight;
       if (!naturalW || !naturalH) return;
+
+      // 세로 범위는 구역 rect 기준으로 살짝만 여유를 두어(세로 틀 높이 자체는 바뀌지
+      // 않게) 유지하고, 가로 범위는 화면 가로세로 비율에 맞을 만큼 넓혀서 세로 틀은
+      // 그대로인 채 좌우로 가려져 있던 부분을 더 보여준다.
+      const padH = rect.hPct * 0.1;
+      let viewHPct = Math.min(100, rect.hPct + padH);
+      let viewYPct = Math.max(0, Math.min(rect.yPct - padH / 2, 100 - viewHPct));
+
+      // 화면 폭 측정 전에, 이전 구역에서 남아있을 수 있는 좁은 인라인 폭을 지워
+      // CSS 기준(부모 폭에 꽉 찬) 실제 가용 폭을 구한다.
+      el.mapStage.style.width = '';
+      el.mapStage.style.margin = '';
+      const stageTop = el.mapStage.getBoundingClientRect().top;
+      const availableHeight = Math.max(240, window.innerHeight - stageTop - 16);
+      const availableWidth = el.mapStage.clientWidth || window.innerWidth;
+      const screenPxAspect = availableHeight / availableWidth; // 화면의 세로/가로 비율
+      const viewHeightPx = (viewHPct / 100) * naturalH;
+      const desiredWidthPx = viewHeightPx / screenPxAspect;
+      const minWPct = Math.min(100, rect.wPct * 1.1);
+      const viewWPct = Math.max(minWPct, Math.min(100, (desiredWidthPx / naturalW) * 100));
+      const viewXPct = Math.max(0, Math.min(rect.xPct - (viewWPct - rect.wPct) / 2, 100 - viewWPct));
+
+      const view = { xPct: viewXPct, yPct: viewYPct, wPct: viewWPct, hPct: viewHPct };
+
       const cropAspect = (view.hPct * naturalH) / (view.wPct * naturalW);
       fitStageToScreen(cropAspect);
       const containerWidth = el.mapStage.clientWidth || 1;
