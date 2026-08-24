@@ -608,13 +608,16 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
-  function staffLine(label, a) {
-    if (!a) {
+  function staffLine(label, list) {
+    if (!list || !list.length) {
       return `<div class="staff-row"><span class="staff-zone">${escapeHtml(label)}</span><span class="staff-empty">담당자 미배정</span></div>`;
     }
-    const contact = a.phone ? ` · ${escapeHtml(a.phone)}` : '';
-    const note = a.note ? ` (${escapeHtml(a.note)})` : '';
-    return `<div class="staff-row"><span class="staff-zone">${escapeHtml(label)}</span><span>${escapeHtml(a.displayName)}${contact}${note}</span></div>`;
+    const names = list.map((a) => {
+      const contact = a.phone ? ` · ${escapeHtml(a.phone)}` : '';
+      const note = a.note ? ` (${escapeHtml(a.note)})` : '';
+      return `${escapeHtml(a.displayName)}${contact}${note}`;
+    });
+    return `<div class="staff-row"><span class="staff-zone">${escapeHtml(label)}</span><span>${names.join(', ')}</span></div>`;
   }
 
   function renderTodayStaffPanel() {
@@ -628,16 +631,17 @@
     const zone = getActiveZone();
 
     if (zone) {
-      const a = todays.find((x) => x.zoneId === zone.id) || todays.find((x) => !x.zoneId) || null;
-      el.todayStaffPanel.innerHTML = staffLine(`오늘(${today}) ${zone.name} 담당자`, a);
+      let list = todays.filter((x) => x.zoneId === zone.id);
+      if (!list.length) list = todays.filter((x) => !x.zoneId);
+      el.todayStaffPanel.innerHTML = staffLine(`오늘(${today}) ${zone.name} 담당자`, list);
       return;
     }
 
-    const general = todays.find((x) => !x.zoneId) || null;
-    const lines = [staffLine(`오늘(${today}) 담당자`, general)];
+    const generalList = todays.filter((x) => !x.zoneId);
+    const lines = [staffLine(`오늘(${today}) 담당자`, generalList)];
     for (const z of state.event.zones || []) {
-      const a = todays.find((x) => x.zoneId === z.id) || null;
-      if (a) lines.push(staffLine(z.name, a));
+      const list = todays.filter((x) => x.zoneId === z.id);
+      if (list.length) lines.push(staffLine(z.name, list));
     }
     el.todayStaffPanel.innerHTML = lines.join('');
   }
