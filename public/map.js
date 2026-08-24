@@ -1,5 +1,5 @@
 (() => {
-  const MIN_ZOOM = 1;
+  const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 4;
   const LOCATE_ZOOM = 2;
 
