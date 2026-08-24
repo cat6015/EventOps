@@ -139,7 +139,9 @@
 }
 
 .zone-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-.zone-tabs button { background: #f0f4f9; color: #374151; padding: 6px 14px; font-size: 0.85rem; }
+/* 다른 버튼(회색 secondary)과 헷갈리지 않도록 전체배치도/구역 탭만 보라색 계열로 구분한다 */
+.zone-tabs button { background: #f3e8ff; color: #6d28d9; padding: 6px 14px; font-size: 0.85rem; }
+.zone-tabs button:not(.active):hover { background: #e9d5ff; }
 .zone-tabs button.active { background: #1f6feb; color: white; }
 .zone-tabs button.has-alert { animation: zone-tab-blink 1s ease-in-out infinite; }
 @keyframes zone-tab-blink {
@@ -210,8 +212,9 @@
 .batch-panel {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   margin: 10px 0;
   padding: 10px 12px;
   background: #eef4ff;
@@ -219,6 +222,8 @@
   border-radius: 8px;
   font-size: 0.85rem;
 }
+.batch-panel > * { flex-shrink: 0; }
+.batch-panel button { padding: 5px 10px; font-size: 0.8rem; }
 .batch-panel .batch-divider {
   width: 1px;
   align-self: stretch;
