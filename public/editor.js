@@ -778,8 +778,10 @@
     if (n > 0) {
       const first = state.event.booths.find((b) => state.selected.has(b.id));
       if (first) {
-        el.batchWidth.value = first.wPct || DEFAULT_BOOTH_SIZE;
-        el.batchHeight.value = first.hPct || DEFAULT_BOOTH_SIZE;
+        // 전체 배치도에서는 화면에 실제로 보이는 크기(구역 rect 비율 반영)를 보여준다.
+        const size = boothSize(first);
+        el.batchWidth.value = Math.round(size.wPct * 100) / 100;
+        el.batchHeight.value = Math.round(size.hPct * 100) / 100;
       }
     }
   }
@@ -818,7 +820,24 @@
       alert('가로/세로 크기를 올바르게 입력해주세요.');
       return;
     }
-    const items = Array.from(state.selected).map((id) => ({ id, wPct, hPct }));
+    // 전체 배치도에서 입력한 크기는 "전체 배치도 기준" 크기로 본다. 선택된 부스가
+    // 구역에 속해 있으면, 상세구역 화면은 그 구역 rect 비율만큼 확대되어 보이므로
+    // 같은 비율로 크기를 키운 값을 그 구역 좌표계 크기로 저장해야 물리적 크기가
+    // 일치해 보인다(구역 상세 화면에서 너무 작게 보이는 문제 방지).
+    const onOverview = !getActiveZone();
+    const items = Array.from(state.selected).map((id) => {
+      const booth = state.event.booths.find((b) => b.id === id);
+      let itemW = wPct;
+      let itemH = hPct;
+      if (onOverview && booth && booth.zoneId) {
+        const zone = state.event.zones.find((z) => z.id === booth.zoneId);
+        if (zone && zone.rect) {
+          itemW = Math.min(100, Math.max(0.5, wPct * (100 / zone.rect.wPct)));
+          itemH = Math.min(100, Math.max(0.5, hPct * (100 / zone.rect.hPct)));
+        }
+      }
+      return { id, wPct: itemW, hPct: itemH };
+    });
     try {
       const { booths } = await api(`/api/events/${state.event.id}/booths/bulk`, {
         method: 'PATCH',
