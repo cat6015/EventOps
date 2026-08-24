@@ -1,5 +1,5 @@
 (() => {
-  const MIN_ZOOM = 0.5;
+  const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 5;
   const DEFAULT_BOOTH_SIZE = 6;
 
