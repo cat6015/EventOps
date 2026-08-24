@@ -334,3 +334,24 @@
 .event-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 
 .booth-list-table td.num { font-weight: 600; }
+
+/* 모바일에서는 행사선택/담당자/구역탭/A·S배너/줌툴바가 세로 폭을 덜 차지하도록 줄인다 */
+@media (max-width: 640px) {
+  .event-picker { gap: 6px; margin-bottom: 8px; font-size: 0.78rem; }
+  .event-picker label { font-size: 0.78rem; }
+
+  .today-staff-panel { padding: 6px 10px; margin-bottom: 8px; gap: 3px; font-size: 0.74rem; }
+  .today-staff-panel .staff-zone { min-width: 44px; }
+
+  .active-as-banner { padding: 6px 10px; margin-bottom: 8px; gap: 4px; font-size: 0.74rem; }
+  .active-as-chip { padding: 3px 8px; font-size: 0.7rem; }
+
+  .zone-tabs { gap: 4px; margin-bottom: 8px; }
+  .zone-tabs button { padding: 4px 9px; font-size: 0.72rem; }
+  .tab-alert-badge { font-size: 0.66rem; padding: 0 5px; }
+
+  .zoom-toolbar { gap: 5px; margin-bottom: 6px; }
+  .zoom-toolbar button { padding: 4px 8px; font-size: 0.72rem; }
+  .zoom-toolbar .zoom-level { font-size: 0.72rem; min-width: 34px; }
+  .zoom-toolbar .status-msg { display: none; }
+}
