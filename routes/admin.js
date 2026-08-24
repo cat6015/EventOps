@@ -9,6 +9,7 @@ function toPublicUser(u) {
     username: u.username,
     displayName: u.displayName,
     role: u.role === 'admin' ? 'admin' : 'user',
+    status: u.status === 'pending' ? 'pending' : 'approved',
     createdAt: u.createdAt,
   };
 }
@@ -37,12 +38,24 @@ router.post('/admin/users', async (req, res) => {
       passwordHash,
       displayName: displayName || username,
       role: role === 'admin' ? 'admin' : 'user',
+      status: 'approved',
       createdAt: new Date().toISOString(),
     });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// 회원가입으로 만들어진(승인 대기) 계정을 관리자가 승인한다.
+router.post('/admin/users/:username/approve', (req, res) => {
+  const { username } = req.params;
+  const target = store.findUser(username);
+  if (!target) {
+    return res.status(404).json({ error: '계정을 찾을 수 없습니다.' });
+  }
+  store.approveUser(username);
+  res.json({ ok: true });
 });
 
 router.delete('/admin/users/:username', (req, res) => {

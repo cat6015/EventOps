@@ -10,6 +10,7 @@
     createUserBtn: document.getElementById('create-user-btn'),
     createUserStatus: document.getElementById('create-user-status'),
     userListBody: document.getElementById('user-list-body'),
+    pendingCountBadge: document.getElementById('pending-count-badge'),
     importJson: document.getElementById('import-json'),
     importBtn: document.getElementById('import-btn'),
     importStatus: document.getElementById('import-status'),
@@ -34,9 +35,16 @@
 
   async function loadUsers() {
     const users = await api('/api/admin/users');
+    const pendingCount = users.filter((u) => u.status === 'pending').length;
+    el.pendingCountBadge.textContent = pendingCount > 0 ? `(승인 대기 ${pendingCount}건)` : '';
+
     el.userListBody.innerHTML = users
-      .map(
-        (u) => `<tr>
+      .map((u) => {
+        const isPending = u.status === 'pending';
+        const approveBtn = isPending
+          ? `<button class="link-btn approve-user-btn" data-username="${escapeHtml(u.username)}">승인</button> `
+          : '';
+        return `<tr>
           <td>${escapeHtml(u.username)}</td>
           <td>${escapeHtml(u.displayName)}</td>
           <td>
@@ -45,11 +53,12 @@
               <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option>
             </select>
           </td>
+          <td><span class="badge ${isPending ? 'pending' : 'active'}">${isPending ? '승인 대기' : '승인됨'}</span></td>
           <td>
-            <button class="link-btn danger delete-user-btn" data-username="${escapeHtml(u.username)}" ${u.username === me.username ? 'disabled' : ''}>삭제</button>
+            ${approveBtn}<button class="link-btn danger delete-user-btn" data-username="${escapeHtml(u.username)}" ${u.username === me.username ? 'disabled' : ''}>삭제</button>
           </td>
-        </tr>`
-      )
+        </tr>`;
+      })
       .join('');
 
     el.userListBody.querySelectorAll('.role-select').forEach((sel) => {
@@ -63,6 +72,17 @@
         } catch (err) {
           alert(err.message);
           await loadUsers();
+        }
+      });
+    });
+
+    el.userListBody.querySelectorAll('.approve-user-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await api(`/api/admin/users/${encodeURIComponent(btn.dataset.username)}/approve`, { method: 'POST' });
+          await loadUsers();
+        } catch (err) {
+          alert(err.message);
         }
       });
     });

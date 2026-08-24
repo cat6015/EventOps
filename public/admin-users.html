@@ -39,10 +39,11 @@
   </div>
 
   <div class="box" style="margin-top:24px;">
-    <h2>계정 목록</h2>
+    <h2>계정 목록 <span id="pending-count-badge"></span></h2>
+    <p class="status-msg" style="margin-top:-6px;">회원가입으로 신청된 계정은 "승인 대기" 상태로 표시되며, 승인해야 로그인할 수 있습니다.</p>
     <div class="scroll-box">
       <table>
-        <thead><tr><th>아이디</th><th>표시 이름</th><th>권한</th><th></th></tr></thead>
+        <thead><tr><th>아이디</th><th>표시 이름</th><th>권한</th><th>상태</th><th></th></tr></thead>
         <tbody id="user-list-body"></tbody>
       </table>
     </div>

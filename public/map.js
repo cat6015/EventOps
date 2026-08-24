@@ -17,6 +17,7 @@
     openAlerts: [],
     socket: null,
     zoom: 1,
+    wideZoom: false, // PC에서 확대 중일 때 지도 영역이 화면 가로폭 전체를 쓰는 중인지
     resolvingAlertId: null,
     reportBoothByLabel: new Map(),
   };
@@ -280,6 +281,15 @@
   function applyZoom() {
     el.mapCanvas.style.transform = `scale(${state.zoom})`;
     el.zoomLevel.textContent = `${Math.round(state.zoom * 100)}%`;
+    // 확대가 막 시작/해제되는 순간에만(매 확대 단계마다가 아니라) 지도 영역 폭을 넓히거나
+    // 되돌리고, 그 새 폭 기준으로 화면 맞춤을 다시 계산한다(PC에서 좁은 본문 폭 안에
+    // 갇혀 스크롤로만 보이지 않도록).
+    const shouldBeWide = state.zoom > 1;
+    if (shouldBeWide !== state.wideZoom) {
+      state.wideZoom = shouldBeWide;
+      el.mapStage.classList.toggle('wide-zoom', shouldBeWide);
+      if (state.currentAspect) fitStageToScreen(state.currentAspect);
+    }
   }
 
   function resetZoom() {

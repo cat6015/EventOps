@@ -39,8 +39,13 @@ function writeJson(filePath, data) {
 }
 
 // ---- users ----
+// 예전 데이터에는 status 필드가 없을 수 있어(회원가입/승인 기능 이전에 만들어진 계정),
+// 없으면 이미 쓰던 계정이라는 뜻으로 'approved'(승인됨)로 간주한다.
 function getUsers() {
-  return readJson(USERS_FILE);
+  return readJson(USERS_FILE).map((u) => {
+    if (u.status === undefined) u.status = 'approved';
+    return u;
+  });
 }
 
 function findUser(username) {
@@ -75,6 +80,16 @@ function setUserRole(username, role) {
   return user;
 }
 
+// 회원가입으로 만들어진('pending') 계정을 관리자가 승인해 로그인할 수 있게 한다.
+function approveUser(username) {
+  const users = getUsers();
+  const user = users.find((u) => u.username === username);
+  if (!user) return null;
+  user.status = 'approved';
+  writeJson(USERS_FILE, users);
+  return user;
+}
+
 // oct-portal(field-file-portal)에서 내려받은 users.json 형태 그대로 붙여넣어
 // 계정을 일괄 등록한다. passwordHash는 재해싱하지 않고 그대로 저장하므로
 // 기존 비밀번호 그대로 로그인할 수 있다. 이미 있는 username은 건너뛴다.
@@ -98,6 +113,7 @@ function importUsers(rawUsers) {
       passwordHash: raw.passwordHash,
       displayName: raw.displayName || raw.username,
       role: raw.role === 'admin' ? 'admin' : 'user',
+      status: 'approved',
       createdAt: new Date().toISOString(),
     };
     users.push(user);
@@ -128,6 +144,7 @@ async function ensureBootstrapAdmin() {
     passwordHash,
     displayName: process.env.ADMIN_DISPLAY_NAME || username,
     role: 'admin',
+    status: 'approved',
     createdAt: new Date().toISOString(),
   });
   console.log(`부트스트랩 관리자 계정이 생성되었습니다: ${username}`);
@@ -762,6 +779,7 @@ module.exports = {
   addUser,
   removeUser,
   setUserRole,
+  approveUser,
   importUsers,
   ensureBootstrapAdmin,
   // events

@@ -120,6 +120,8 @@ th { color: #6b7280; font-weight: 600; }
   font-size: 0.9rem;
 }
 .login-card button { width: 100%; padding: 10px; margin-top: 6px; }
+.login-card .auth-switch { text-align: center; font-size: 0.82rem; color: #6b7280; margin: 14px 0 0; }
+.login-card .auth-switch .link-btn { font-size: 0.82rem; }
 
 .modal-overlay {
   position: fixed;
@@ -151,6 +153,7 @@ th { color: #6b7280; font-weight: 600; }
 }
 .badge.active { background: #e6f4ea; color: #1a7f37; }
 .badge.archived { background: #f0f2f5; color: #6b7280; }
+.badge.pending { background: #fef3c7; color: #92400e; }
 
 /* 모바일에서는 상단바가 세로 폭을 너무 많이 차지하지 않도록 폰트/여백을 줄인다 */
 @media (max-width: 640px) {
