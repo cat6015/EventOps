@@ -925,6 +925,16 @@
     el.popover.hidden = true;
   }
   el.popoverClose.addEventListener('click', closePopover);
+
+  // 팝업이 떠 있을 때 팝업 바깥을 클릭하면 닫는다. 부스 마커 클릭은 그 마커 자신의
+  // 클릭 핸들러가 새 팝업을 열므로(전파를 막지 않음) 여기서는 건드리지 않고 지나간다.
+  document.addEventListener('click', (e) => {
+    if (el.popover.hidden) return;
+    if (el.popover.contains(e.target)) return;
+    if (e.target.closest('.booth-marker')) return;
+    closePopover();
+  });
+
   el.popoverStoreInfoToggle.addEventListener('click', () => {
     const willShow = el.popoverStoreInfo.hidden;
     el.popoverStoreInfo.hidden = !willShow;
