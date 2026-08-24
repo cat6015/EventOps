@@ -64,7 +64,8 @@
   <div class="box" style="margin-top:24px;">
     <h2>A/S 등록</h2>
     <div class="inline-form">
-      <select id="report-booth-select"></select>
+      <input type="text" id="report-booth-search" list="report-booth-datalist" placeholder="부스번호/상호/사업자번호로 검색" autocomplete="off" />
+      <datalist id="report-booth-datalist"></datalist>
       <select id="report-issue-select"></select>
       <input type="text" id="report-note" placeholder="메모(선택, 기타 유형에 권장)" />
       <button id="report-submit">AS발생 등록</button>

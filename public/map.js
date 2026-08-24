@@ -18,6 +18,7 @@
     socket: null,
     zoom: 1,
     resolvingAlertId: null,
+    reportBoothByLabel: new Map(),
   };
 
   const el = {
@@ -39,7 +40,8 @@
     zoomOutBtn: document.getElementById('zoom-out-btn'),
     zoomResetBtn: document.getElementById('zoom-reset-btn'),
     zoomLevel: document.getElementById('zoom-level'),
-    reportBoothSelect: document.getElementById('report-booth-select'),
+    reportBoothSearch: document.getElementById('report-booth-search'),
+    reportBoothDatalist: document.getElementById('report-booth-datalist'),
     reportIssueSelect: document.getElementById('report-issue-select'),
     reportNote: document.getElementById('report-note'),
     reportSubmit: document.getElementById('report-submit'),
@@ -134,17 +136,18 @@
       state.socket = window.SocketClient.connect(eventId, {
         onAlertCreated: ({ alert }) => {
           if (alert.eventId !== state.eventId) return;
-          state.openAlerts.unshift(alert);
-          applyAlertsToMap();
-          renderOpenAlertsTable();
-          playSirenBeep();
+          if (addOpenAlert(alert)) playSirenBeep();
         },
         onAlertResolved: (payload) => {
-          const idx = state.openAlerts.findIndex((a) => a.id === payload.alertId);
-          if (idx !== -1) state.openAlerts.splice(idx, 1);
-          applyAlertsToMap();
-          renderOpenAlertsTable();
+          removeOpenAlert(payload.alertId);
           loadResolvedAlerts();
+        },
+        onInstallUpdated: ({ booths }) => {
+          for (const b of booths) {
+            const local = state.event.booths.find((x) => x.id === b.id);
+            if (local) local.installStatus = b.installStatus;
+          }
+          applyAlertsToMap();
         },
       });
     }
@@ -154,15 +157,33 @@
     const event = await api(`/api/events/${eventId}`);
     state.event = event;
 
-    el.reportBoothSelect.innerHTML = event.booths
-      .slice()
-      .sort((a, b) => a.number.localeCompare(b.number, 'ko', { numeric: true }))
-      .map((b) => `<option value="${b.id}">${b.number}</option>`)
-      .join('');
+    renderReportBoothOptions();
 
     renderZoneTabs();
     renderTodayStaffPanel();
     renderCurrentMap();
+  }
+
+  // 부스번호/상호/사업자번호로 검색해 고를 수 있도록 datalist 옵션을 만든다.
+  function boothSearchLabel(b) {
+    const parts = [b.number];
+    if (b.storeName) parts.push(b.storeName);
+    if (b.businessNumber) parts.push(b.businessNumber);
+    return parts.join(' · ');
+  }
+
+  function renderReportBoothOptions() {
+    const booths = state.event.booths
+      .slice()
+      .sort((a, b) => a.number.localeCompare(b.number, 'ko', { numeric: true }));
+    state.reportBoothByLabel = new Map();
+    el.reportBoothDatalist.innerHTML = booths
+      .map((b) => {
+        const label = boothSearchLabel(b);
+        state.reportBoothByLabel.set(label, b.id);
+        return `<option value="${escapeHtml(label)}"></option>`;
+      })
+      .join('');
   }
 
   function getActiveZone() {
@@ -588,6 +609,26 @@
     el.todayStaffPanel.innerHTML = lines.join('');
   }
 
+  // 새 A/S를 목록/지도에 반영한다(이미 있으면 무시). 소켓이 늦거나 끊겨도 등록한
+  // 본인 화면은 즉시 갱신되고, 실제로 새로 추가된 경우에만 true를 돌려준다(중복 경보음 방지용).
+  function addOpenAlert(alert) {
+    if (state.openAlerts.some((a) => a.id === alert.id)) return false;
+    state.openAlerts.unshift(alert);
+    applyAlertsToMap();
+    renderOpenAlertsTable();
+    return true;
+  }
+
+  // 처리완료된 A/S를 목록/지도에서 즉시 뺀다(소켓 도착 여부와 무관하게 항상 먼저 반영).
+  function removeOpenAlert(alertId) {
+    const idx = state.openAlerts.findIndex((a) => a.id === alertId);
+    if (idx === -1) return false;
+    state.openAlerts.splice(idx, 1);
+    applyAlertsToMap();
+    renderOpenAlertsTable();
+    return true;
+  }
+
   async function refreshAlerts() {
     if (!state.eventId) return;
     state.openAlerts = await api(`/api/events/${state.eventId}/alerts?status=open`);
@@ -708,6 +749,8 @@
     const note = el.resolveModalNote.value.trim();
     try {
       await resolveAlert(state.resolvingAlertId, resolutionType, note);
+      removeOpenAlert(state.resolvingAlertId);
+      loadResolvedAlerts();
       closeResolveModal();
       closePopover();
     } catch (err) {
@@ -796,18 +839,25 @@
 
   el.reportSubmit.addEventListener('click', async () => {
     el.reportStatus.textContent = '';
-    const boothId = el.reportBoothSelect.value;
+    const boothId = state.reportBoothByLabel.get(el.reportBoothSearch.value.trim());
     const issueType = el.reportIssueSelect.value;
     const note = el.reportNote.value;
-    if (!boothId || !issueType) {
-      el.reportStatus.textContent = '부스와 이슈 유형을 선택해주세요.';
+    if (!boothId) {
+      el.reportStatus.textContent = '목록에서 부스를 선택해주세요(번호/상호/사업자번호로 검색 가능).';
+      return;
+    }
+    if (!issueType) {
+      el.reportStatus.textContent = '이슈 유형을 선택해주세요.';
       return;
     }
     try {
-      await api(`/api/events/${state.eventId}/alerts`, {
+      const { alert } = await api(`/api/events/${state.eventId}/alerts`, {
         method: 'POST',
         body: JSON.stringify({ boothId, issueType, note }),
       });
+      addOpenAlert(alert);
+      playSirenBeep();
+      el.reportBoothSearch.value = '';
       el.reportNote.value = '';
       el.reportStatus.textContent = 'AS발생이 등록되었습니다.';
     } catch (err) {

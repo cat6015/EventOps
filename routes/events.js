@@ -5,6 +5,7 @@ const multer = require('multer');
 const ExcelJS = require('exceljs');
 const store = require('../store');
 const { requireAdmin } = require('../middleware');
+const { broadcastToEvent } = require('../socket');
 
 const router = express.Router();
 
@@ -412,6 +413,7 @@ router.post('/events/:id/booths/install-start', requireAdmin, (req, res) => {
   }
 
   const updated = store.startInstallation(event.id, validIds);
+  broadcastToEvent(event.id, 'booths:install-updated', { booths: updated });
   res.json({ ok: true, booths: updated });
 });
 
@@ -430,6 +432,7 @@ router.patch('/events/:id/booths/:boothId/install-status', (req, res) => {
   }
 
   const updated = store.setBoothInstallStatus(event.id, booth.id, installStatus);
+  broadcastToEvent(event.id, 'booths:install-updated', { booths: [updated] });
   res.json({ ok: true, booth: updated });
 });
 
