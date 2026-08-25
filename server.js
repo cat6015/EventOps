@@ -62,6 +62,9 @@ app.get('/login.js', (req, res) => {
 });
 app.use('/css', express.static(path.join(__dirname, 'public', 'css')));
 app.use('/js', express.static(path.join(__dirname, 'public', 'js')));
+app.get('/favicon.png', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'favicon.png'));
+});
 
 app.use('/api', authRoutes);
 app.use('/api', requireLogin, eventRoutes);
