@@ -15,6 +15,7 @@ body {
   color: white;
 }
 .topbar h1 { font-size: 1.2rem; margin: 0; }
+.app-logo { width: 1.3em; height: 1.3em; vertical-align: -0.25em; margin-right: 6px; border-radius: 4px; object-fit: cover; }
 .topbar nav { display: flex; gap: 14px; margin-left: 24px; }
 .topbar-left { display: flex; align-items: center; }
 .user-info { display: flex; align-items: center; gap: 12px; }
