@@ -51,6 +51,23 @@ button.danger { background: #d1242f; }
 button.danger:hover { background: #b91c1c; }
 
 .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+
+.page-tabs { display: flex; gap: 4px; border-bottom: 1px solid #d1d5db; margin-bottom: 20px; }
+.page-tab {
+  background: none;
+  color: #6b7280;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 6px;
+  margin-bottom: -1px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.page-tab:hover { background: none; color: #1f2933; }
+.page-tab.active { color: #1f6feb; border-bottom-color: #1f6feb; }
+
 .box {
   background: white;
   border-radius: 8px;
@@ -165,3 +182,114 @@ th { color: #6b7280; font-weight: 600; }
   .user-info { gap: 8px; }
   .user-info span { font-size: 0.74rem; }
 }
+
+/* OT(연장근무) 계산기 */
+.ot-day-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin: 16px 0 20px; }
+@media (max-width: 760px) { .ot-day-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 480px) { .ot-day-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.ot-day-card {
+  border: 1px solid #e5e7eb;
+  border-top: 3px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ot-day-card.is-holiday { border-top-color: #d1242f; }
+.ot-day-card .ot-day-name { font-weight: 700; font-size: 0.95rem; }
+.ot-day-card.is-sun .ot-day-name, .ot-day-card.is-holiday .ot-day-name { color: #d1242f; }
+.ot-day-card .ot-day-full { font-size: 0.68rem; color: #6b7280; margin-top: -6px; }
+
+.ot-holiday-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #6b7280; cursor: pointer; user-select: none; }
+.ot-holiday-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  border: 1px solid #d1d5db;
+  position: relative;
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s ease;
+}
+.ot-holiday-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  transition: transform 0.15s ease;
+}
+.ot-holiday-toggle input:checked { background: #d1242f; border-color: #d1242f; }
+.ot-holiday-toggle input:checked::after { transform: translateX(12px); }
+.ot-holiday-toggle .ot-label-on { color: #d1242f; font-weight: 600; }
+
+.ot-calteo-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #6b7280; cursor: pointer; user-select: none; }
+.ot-calteo-toggle.is-disabled { opacity: 0.4; pointer-events: none; }
+.ot-calteo-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  border: 1px solid #d1d5db;
+  position: relative;
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s ease;
+}
+.ot-calteo-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  transition: transform 0.15s ease;
+}
+.ot-calteo-toggle input:checked { background: #1a7f37; border-color: #1a7f37; }
+.ot-calteo-toggle input:checked::after { transform: translateX(12px); }
+.ot-calteo-toggle .ot-label-on { color: #1a7f37; font-weight: 600; }
+
+.ot-hours-select, .ot-checkin-select { width: 100%; font-size: 0.85rem; font-weight: 600; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; background: #f7f8fa; }
+
+.ot-checkin-wrap { display: flex; flex-direction: column; gap: 4px; }
+.ot-checkin-note { font-size: 0.66rem; color: #1a7f37; line-height: 1.4; }
+
+.ot-day-result { font-size: 0.7rem; color: #6b7280; border-top: 1px dashed #e5e7eb; padding-top: 6px; }
+.ot-day-result .ot-val { color: #1f2933; font-weight: 600; }
+.ot-day-result .ot-val.has-ot { color: #1f6feb; }
+
+.ot-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 18px; }
+@media (max-width: 620px) { .ot-stat-row { grid-template-columns: repeat(2, 1fr); } }
+.ot-stat { background: #f7f8fa; border-radius: 8px; padding: 10px 12px; }
+.ot-stat .ot-stat-label { font-size: 0.7rem; color: #6b7280; margin-bottom: 4px; }
+.ot-stat .ot-stat-value { font-size: 1.2rem; font-weight: 700; }
+.ot-stat .ot-stat-value .ot-unit { font-size: 0.68rem; color: #6b7280; font-weight: 500; margin-left: 2px; }
+.ot-stat.status-good .ot-stat-value { color: #1a7f37; }
+.ot-stat.status-bad .ot-stat-value { color: #d1242f; }
+
+.ot-gauge-head { display: flex; justify-content: space-between; font-size: 0.75rem; color: #6b7280; margin-bottom: 6px; }
+.ot-gauge-head .ot-gauge-fig { font-weight: 700; color: #1f2933; }
+.ot-gauge-track { position: relative; height: 10px; border-radius: 999px; background: #eef1f5; overflow: hidden; border: 1px solid #e5e7eb; }
+.ot-gauge-fill { height: 100%; border-radius: 999px; background: #1a7f37; transition: width 0.2s ease, background 0.2s ease; }
+.ot-gauge-fill.status-warn { background: #b45309; }
+.ot-gauge-fill.status-bad { background: #d1242f; }
+.ot-cap-mark { position: absolute; top: -2px; bottom: -2px; right: 0; width: 2px; background: #1f2933; opacity: 0.3; }
+
+.ot-banner { display: none; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 0.82rem; line-height: 1.5; }
+.ot-banner.show { display: flex; }
+.ot-banner .ot-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; background: #d1242f; }
+.ot-banner.status-bad { background: #fdecea; color: #b91c1c; }
