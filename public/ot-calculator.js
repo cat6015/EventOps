@@ -30,15 +30,7 @@
   const WEEKLY_OT_CAP = 12;
   const BASE_HOURS = 8;
   const CALTEO_SPAN_MINUTES = 9 * 60; // 9시간(식사시간 1시간 포함) => 실근무 8시간
-  const STORE_KEY = 'admin-ot-calc-week-v2';
-
-  function hourOptions(selected) {
-    let out = '';
-    for (let h = 0; h <= 16; h += 0.5) {
-      out += `<option value="${h}" ${h === selected ? 'selected' : ''}>${h.toFixed(1)}시간</option>`;
-    }
-    return out;
-  }
+  const STORE_KEY = 'admin-ot-calc-week-v3';
 
   function minutesToLabel(mins) {
     const wrapped = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
@@ -47,13 +39,11 @@
     return `${hh}:${mm}`;
   }
 
-  function checkinOptions(selectedMinutes) {
-    let out = '';
-    for (let m = 6 * 60; m <= 12 * 60; m += 30) {
-      const label = minutesToLabel(m);
-      out += `<option value="${m}" ${m === selectedMinutes ? 'selected' : ''}>${label} 출근</option>`;
-    }
-    return out;
+  function parseTimeToMinutes(str) {
+    if (!str) return null;
+    const [h, m] = str.split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return h * 60 + m;
   }
 
   DAYS.forEach((d) => {
@@ -73,13 +63,19 @@
         <input type="checkbox" class="ot-calteo-check" />
         <span class="ot-label-text">칼퇴</span>
       </label>
-      <select class="ot-hours-select">${hourOptions(0)}</select>
-      <div class="ot-checkin-wrap" hidden>
-        <select class="ot-checkin-select">${checkinOptions(9 * 60)}</select>
-        <div class="ot-checkin-note"></div>
+      <div class="ot-time-row">
+        <label class="ot-time-field">
+          <span class="ot-time-caption">출근</span>
+          <input type="time" class="ot-checkin-time" value="09:00" />
+        </label>
+        <label class="ot-time-field ot-checkout-field">
+          <span class="ot-time-caption">퇴근</span>
+          <input type="time" class="ot-checkout-time" value="18:00" />
+        </label>
       </div>
+      <div class="ot-day-note"></div>
       <div class="ot-day-result">
-        정규 <span class="ot-reg-val">0.0h</span> · OT <span class="ot-val">0.0h</span>
+        근무 <span class="ot-worked-val">0.0h</span> · 정규 <span class="ot-reg-val">0.0h</span> · OT <span class="ot-val">0.0h</span>
       </div>
     `;
     grid.appendChild(card);
@@ -108,8 +104,8 @@
       state[card.dataset.key] = {
         holiday: card.querySelector('.ot-holiday-check').checked,
         calteo: card.querySelector('.ot-calteo-check').checked,
-        hours: parseFloat(card.querySelector('.ot-hours-select').value),
-        checkin: parseInt(card.querySelector('.ot-checkin-select').value, 10),
+        checkin: card.querySelector('.ot-checkin-time').value,
+        checkout: card.querySelector('.ot-checkout-time').value,
       };
     });
     return state;
@@ -123,14 +119,8 @@
       const card = grid.querySelector(`.ot-day-card[data-key="${d.key}"]`);
       card.querySelector('.ot-holiday-check').checked = !!s.holiday;
       card.querySelector('.ot-calteo-check').checked = !!s.calteo;
-      const sel = card.querySelector('.ot-hours-select');
-      if (sel.querySelector(`option[value="${s.hours}"]`)) {
-        sel.value = String(s.hours);
-      }
-      const checkinSel = card.querySelector('.ot-checkin-select');
-      if (Number.isFinite(s.checkin) && checkinSel.querySelector(`option[value="${s.checkin}"]`)) {
-        checkinSel.value = String(s.checkin);
-      }
+      if (s.checkin) card.querySelector('.ot-checkin-time').value = s.checkin;
+      if (s.checkout) card.querySelector('.ot-checkout-time').value = s.checkout;
     });
   }
 
@@ -138,7 +128,7 @@
     return (Math.round(n * 10) / 10).toFixed(1);
   }
 
-  // 휴일 여부에 따라 칼퇴 토글의 사용 가능 상태와, 시간 입력 방식(직접 선택 vs 출근시간 기준)을 맞춘다.
+  // 휴일 여부에 따라 칼퇴 토글의 사용 가능 상태와, 퇴근시간 입력 방식(직접 선택 vs 출근시간+9h 자동계산)을 맞춘다.
   function syncCardMode(card) {
     const isHoliday = card.querySelector('.ot-holiday-check').checked;
     const calteoToggle = card.querySelector('.ot-calteo-toggle');
@@ -148,8 +138,7 @@
     if (isHoliday) calteoCheck.checked = false;
 
     const isCalteo = !isHoliday && calteoCheck.checked;
-    card.querySelector('.ot-hours-select').hidden = isCalteo;
-    card.querySelector('.ot-checkin-wrap').hidden = !isCalteo;
+    card.querySelector('.ot-checkout-field').hidden = isCalteo;
 
     return { isHoliday, isCalteo };
   }
@@ -166,26 +155,36 @@
       card.querySelector('.ot-holiday-toggle .ot-label-text').classList.toggle('ot-label-on', isHoliday);
       card.querySelector('.ot-calteo-toggle .ot-label-text').classList.toggle('ot-label-on', isCalteo);
 
-      let hours;
+      const checkinInput = card.querySelector('.ot-checkin-time');
+      const checkoutInput = card.querySelector('.ot-checkout-time');
+      const checkinMin = parseTimeToMinutes(checkinInput.value) ?? 0;
+
+      let checkoutMin;
+      let noteText;
       if (isCalteo) {
-        hours = BASE_HOURS; // 9시간 근무(식사시간 1시간 포함) => 실근무 8시간, OT 0시간
-        const checkinMin = parseInt(card.querySelector('.ot-checkin-select').value, 10);
-        const checkoutLabel = minutesToLabel(checkinMin + CALTEO_SPAN_MINUTES);
-        card.querySelector('.ot-checkin-note').textContent =
-          `퇴근 ${checkoutLabel} · 9시간(식사시간 포함) · 실근무 8시간 · OT 0시간`;
+        checkoutMin = checkinMin + CALTEO_SPAN_MINUTES; // 9시간(식사시간 1시간 포함) => 실근무 8시간
+        noteText = `퇴근 ${minutesToLabel(checkoutMin)} · 9시간(식사시간 포함) · 실근무 8시간 · OT 0시간`;
       } else {
-        hours = parseFloat(card.querySelector('.ot-hours-select').value) || 0;
+        checkoutMin = parseTimeToMinutes(checkoutInput.value) ?? checkinMin;
+        if (checkoutMin < checkinMin) checkoutMin += 24 * 60; // 다음날 새벽 퇴근 등 자정을 넘기는 경우
       }
 
-      const regular = isHoliday ? 0 : Math.min(hours, BASE_HOURS);
-      const ot = isHoliday ? hours : Math.max(0, hours - BASE_HOURS);
+      const worked = Math.max(0, (checkoutMin - checkinMin) / 60);
+      if (!isCalteo) {
+        noteText = `${checkinInput.value || '--:--'} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간`;
+      }
+      card.querySelector('.ot-day-note').textContent = noteText;
 
+      const regular = isHoliday ? 0 : Math.min(worked, BASE_HOURS);
+      const ot = isHoliday ? worked : Math.max(0, worked - BASE_HOURS);
+
+      card.querySelector('.ot-worked-val').textContent = fmt(worked) + 'h';
       card.querySelector('.ot-reg-val').textContent = fmt(regular) + 'h';
       const otEl = card.querySelector('.ot-val');
       otEl.textContent = fmt(ot) + 'h';
       otEl.classList.toggle('has-ot', ot > 0);
 
-      totalWorked += hours;
+      totalWorked += worked;
       totalRegular += regular;
       totalOt += ot;
     });
