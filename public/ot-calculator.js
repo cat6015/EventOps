@@ -235,6 +235,23 @@
     persist(readState());
   }
 
+  // 요일별 휴일/칼퇴 체크와 출퇴근 시간을 모두 기본값(토·일만 휴일, 09:00~18:00)으로 되돌린다.
+  function resetToDefaults() {
+    DAYS.forEach((d) => {
+      const card = grid.querySelector(`.ot-day-card[data-key="${d.key}"]`);
+      card.querySelector('.ot-holiday-check').checked = !!d.defaultHoliday;
+      card.querySelector('.ot-calteo-check').checked = false;
+      card.querySelector('.ot-checkin-time').value = '09:00';
+      card.querySelector('.ot-checkout-time').value = '18:00';
+    });
+    recalc();
+  }
+
+  const resetBtn = document.getElementById('ot-reset-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetToDefaults);
+  }
+
   applySaved(loadSaved());
   grid.querySelectorAll('.ot-day-card').forEach(syncCardMode);
   grid.addEventListener('change', recalc);

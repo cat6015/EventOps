@@ -184,6 +184,8 @@ th { color: #6b7280; font-weight: 600; }
 }
 
 /* OT(연장근무) 계산기 */
+.ot-toolbar { display: flex; justify-content: flex-end; margin-top: 4px; }
+
 /* auto-fit + minmax: 화면이 좁아지면 한 줄에 들어가는 카드 수가 줄어들며 다음 줄로 넘어갈 뿐,
    가로 스크롤은 생기지 않는다. */
 .ot-day-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 16px 0 20px; }
