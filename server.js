@@ -98,6 +98,12 @@ app.get('/admin-users.html', requireLogin, requireAdmin, (req, res) => {
 app.get('/admin-users.js', requireLogin, requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-users.js'));
 });
+app.get('/ot-calculator.html', requireLogin, requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ot-calculator.html'));
+});
+app.get('/ot-calculator.js', requireLogin, requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ot-calculator.js'));
+});
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

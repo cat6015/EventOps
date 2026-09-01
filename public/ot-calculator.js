@@ -2,6 +2,32 @@
   const grid = document.getElementById('ot-day-grid');
   if (!grid) return;
 
+  async function api(path, options) {
+    const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || '요청에 실패했습니다.');
+    return data;
+  }
+
+  async function loadMe() {
+    const data = await api('/api/me');
+    if (!data.loggedIn || data.user.role !== 'admin') {
+      window.location.href = '/login.html';
+      return;
+    }
+    document.getElementById('me-name').textContent = `${data.user.displayName} (관리자)`;
+  }
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      await api('/api/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    });
+  }
+
+  loadMe();
+
   const DAYS = [
     { key: 'sun', short: '일', full: '일요일', isSun: true },
     { key: 'mon', short: '월', full: '월요일' },
