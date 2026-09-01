@@ -18,19 +18,19 @@
   }
 
   const DAYS = [
-    { key: 'sun', short: '일', full: '일요일', isSun: true, defaultHoliday: true },
+    { key: 'sun', short: '일', full: '일요일', isSun: true, defaultHoliday: true, excludable: true, defaultExcluded: true },
     { key: 'mon', short: '월', full: '월요일' },
     { key: 'tue', short: '화', full: '화요일' },
     { key: 'wed', short: '수', full: '수요일' },
     { key: 'thu', short: '목', full: '목요일' },
     { key: 'fri', short: '금', full: '금요일' },
-    { key: 'sat', short: '토', full: '토요일', defaultHoliday: true },
+    { key: 'sat', short: '토', full: '토요일', defaultHoliday: true, excludable: true, defaultExcluded: true },
   ];
 
   const WEEKLY_OT_CAP = 12;
   const BASE_HOURS = 8;
   const CALTEO_SPAN_MINUTES = 9 * 60; // 9시간(식사시간 1시간 포함) => 실근무 8시간
-  const STORE_KEY = 'admin-ot-calc-week-v3';
+  const STORE_KEY = 'admin-ot-calc-week-v4';
 
   function minutesToLabel(mins) {
     const wrapped = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
@@ -55,6 +55,11 @@
         <div class="ot-day-name">${d.short}</div>
         <div class="ot-day-full">${d.full}</div>
       </div>
+      ${d.excludable ? `
+      <label class="ot-exclude-toggle">
+        <input type="checkbox" class="ot-exclude-check" ${d.defaultExcluded ? 'checked' : ''} />
+        <span class="ot-label-text">근무 제외</span>
+      </label>` : ''}
       <label class="ot-holiday-toggle">
         <input type="checkbox" class="ot-holiday-check" ${d.defaultHoliday ? 'checked' : ''} />
         <span class="ot-label-text">휴일</span>
@@ -101,7 +106,9 @@
   function readState() {
     const state = {};
     grid.querySelectorAll('.ot-day-card').forEach((card) => {
+      const excludeCheck = card.querySelector('.ot-exclude-check');
       state[card.dataset.key] = {
+        excluded: excludeCheck ? excludeCheck.checked : false,
         holiday: card.querySelector('.ot-holiday-check').checked,
         calteo: card.querySelector('.ot-calteo-check').checked,
         checkin: card.querySelector('.ot-checkin-time').value,
@@ -117,6 +124,8 @@
       const s = saved[d.key];
       if (!s) return;
       const card = grid.querySelector(`.ot-day-card[data-key="${d.key}"]`);
+      const excludeCheck = card.querySelector('.ot-exclude-check');
+      if (excludeCheck) excludeCheck.checked = !!s.excluded;
       card.querySelector('.ot-holiday-check').checked = !!s.holiday;
       card.querySelector('.ot-calteo-check').checked = !!s.calteo;
       if (s.checkin) card.querySelector('.ot-checkin-time').value = s.checkin;
@@ -128,19 +137,28 @@
     return (Math.round(n * 10) / 10).toFixed(1);
   }
 
-  // 휴일 여부에 따라 칼퇴 토글의 사용 가능 상태와, 퇴근시간 입력 방식(직접 선택 vs 출근시간+9h 자동계산)을 맞춘다.
+  // 근무 제외/휴일 여부에 따라 나머지 입력의 사용 가능 상태와, 퇴근시간 입력 방식(직접 선택 vs 출근시간+9h 자동계산)을 맞춘다.
   function syncCardMode(card) {
-    const isHoliday = card.querySelector('.ot-holiday-check').checked;
+    const excludeCheck = card.querySelector('.ot-exclude-check');
+    const isExcluded = !!excludeCheck && excludeCheck.checked;
+
+    const holidayToggle = card.querySelector('.ot-holiday-toggle');
     const calteoToggle = card.querySelector('.ot-calteo-toggle');
     const calteoCheck = card.querySelector('.ot-calteo-check');
+    const timeRow = card.querySelector('.ot-time-row');
 
-    calteoToggle.classList.toggle('is-disabled', isHoliday);
+    holidayToggle.classList.toggle('is-disabled', isExcluded);
+    calteoToggle.classList.toggle('is-disabled', isExcluded);
+    timeRow.classList.toggle('is-disabled', isExcluded);
+
+    const isHoliday = card.querySelector('.ot-holiday-check').checked;
+    calteoToggle.classList.toggle('is-disabled', isExcluded || isHoliday);
     if (isHoliday) calteoCheck.checked = false;
 
-    const isCalteo = !isHoliday && calteoCheck.checked;
+    const isCalteo = !isExcluded && !isHoliday && calteoCheck.checked;
     card.querySelector('.ot-checkout-field').hidden = isCalteo;
 
-    return { isHoliday, isCalteo };
+    return { isExcluded, isHoliday, isCalteo };
   }
 
   function recalc() {
@@ -149,34 +167,39 @@
     let totalOt = 0;
 
     grid.querySelectorAll('.ot-day-card').forEach((card) => {
-      const { isHoliday, isCalteo } = syncCardMode(card);
+      const { isExcluded, isHoliday, isCalteo } = syncCardMode(card);
 
+      card.classList.toggle('is-excluded', isExcluded);
       card.classList.toggle('is-holiday', isHoliday);
       card.querySelector('.ot-holiday-toggle .ot-label-text').classList.toggle('ot-label-on', isHoliday);
       card.querySelector('.ot-calteo-toggle .ot-label-text').classList.toggle('ot-label-on', isCalteo);
 
-      const checkinInput = card.querySelector('.ot-checkin-time');
-      const checkoutInput = card.querySelector('.ot-checkout-time');
-      const checkinMin = parseTimeToMinutes(checkinInput.value) ?? 0;
+      let worked = 0;
+      let noteText = '근무하지 않음(제외)';
 
-      let checkoutMin;
-      let noteText;
-      if (isCalteo) {
-        checkoutMin = checkinMin + CALTEO_SPAN_MINUTES; // 9시간(식사시간 1시간 포함) => 실근무 8시간
-        noteText = `퇴근 ${minutesToLabel(checkoutMin)} · 9시간(식사시간 포함) · 실근무 8시간 · OT 0시간`;
-      } else {
-        checkoutMin = parseTimeToMinutes(checkoutInput.value) ?? checkinMin;
-        if (checkoutMin < checkinMin) checkoutMin += 24 * 60; // 다음날 새벽 퇴근 등 자정을 넘기는 경우
-      }
+      if (!isExcluded) {
+        const checkinInput = card.querySelector('.ot-checkin-time');
+        const checkoutInput = card.querySelector('.ot-checkout-time');
+        const checkinMin = parseTimeToMinutes(checkinInput.value) ?? 0;
 
-      const worked = Math.max(0, (checkoutMin - checkinMin) / 60);
-      if (!isCalteo) {
-        noteText = `${checkinInput.value || '--:--'} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간`;
+        let checkoutMin;
+        if (isCalteo) {
+          checkoutMin = checkinMin + CALTEO_SPAN_MINUTES; // 9시간(식사시간 1시간 포함) => 실근무 8시간
+          noteText = `퇴근 ${minutesToLabel(checkoutMin)} · 9시간(식사시간 포함) · 실근무 8시간 · OT 0시간`;
+        } else {
+          checkoutMin = parseTimeToMinutes(checkoutInput.value) ?? checkinMin;
+          if (checkoutMin < checkinMin) checkoutMin += 24 * 60; // 다음날 새벽 퇴근 등 자정을 넘기는 경우
+        }
+
+        worked = Math.max(0, (checkoutMin - checkinMin) / 60);
+        if (!isCalteo) {
+          noteText = `${checkinInput.value || '--:--'} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간`;
+        }
       }
       card.querySelector('.ot-day-note').textContent = noteText;
 
-      const regular = isHoliday ? 0 : Math.min(worked, BASE_HOURS);
-      const ot = isHoliday ? worked : Math.max(0, worked - BASE_HOURS);
+      const regular = isExcluded || isHoliday ? 0 : Math.min(worked, BASE_HOURS);
+      const ot = isExcluded ? 0 : isHoliday ? worked : Math.max(0, worked - BASE_HOURS);
 
       card.querySelector('.ot-worked-val').textContent = fmt(worked) + 'h';
       card.querySelector('.ot-reg-val').textContent = fmt(regular) + 'h';
@@ -235,10 +258,12 @@
     persist(readState());
   }
 
-  // 요일별 휴일/칼퇴 체크와 출퇴근 시간을 모두 기본값(토·일만 휴일, 09:00~18:00)으로 되돌린다.
+  // 요일별 근무 제외/휴일/칼퇴 체크와 출퇴근 시간을 모두 기본값(토·일은 근무 제외+휴일, 09:00~18:00)으로 되돌린다.
   function resetToDefaults() {
     DAYS.forEach((d) => {
       const card = grid.querySelector(`.ot-day-card[data-key="${d.key}"]`);
+      const excludeCheck = card.querySelector('.ot-exclude-check');
+      if (excludeCheck) excludeCheck.checked = !!d.defaultExcluded;
       card.querySelector('.ot-holiday-check').checked = !!d.defaultHoliday;
       card.querySelector('.ot-calteo-check').checked = false;
       card.querySelector('.ot-checkin-time').value = '09:00';
