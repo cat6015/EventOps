@@ -184,9 +184,9 @@ th { color: #6b7280; font-weight: 600; }
 }
 
 /* OT(연장근무) 계산기 */
-.ot-day-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin: 16px 0 20px; }
-@media (max-width: 760px) { .ot-day-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 480px) { .ot-day-grid { grid-template-columns: repeat(2, 1fr); } }
+/* auto-fit + minmax: 화면이 좁아지면 한 줄에 들어가는 카드 수가 줄어들며 다음 줄로 넘어갈 뿐,
+   가로 스크롤은 생기지 않는다. */
+.ot-day-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 16px 0 20px; }
 
 .ot-day-card {
   border: 1px solid #e5e7eb;
@@ -263,10 +263,11 @@ th { color: #6b7280; font-weight: 600; }
 .ot-calteo-toggle input:checked::after { transform: translateX(12px); }
 .ot-calteo-toggle .ot-label-on { color: #1a7f37; font-weight: 600; }
 
-.ot-time-row { display: flex; gap: 6px; }
-.ot-time-field { flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; font-size: 0.66rem; color: #6b7280; }
+.ot-time-row { display: flex; flex-direction: column; gap: 6px; }
+.ot-time-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.66rem; color: #6b7280; }
 .ot-time-field input[type="time"] {
   width: 100%;
+  min-width: 0;
   font-size: 0.82rem;
   font-weight: 600;
   font-family: inherit;

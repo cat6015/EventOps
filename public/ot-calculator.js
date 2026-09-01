@@ -18,13 +18,13 @@
   }
 
   const DAYS = [
-    { key: 'sun', short: '일', full: '일요일', isSun: true },
+    { key: 'sun', short: '일', full: '일요일', isSun: true, defaultHoliday: true },
     { key: 'mon', short: '월', full: '월요일' },
     { key: 'tue', short: '화', full: '화요일' },
     { key: 'wed', short: '수', full: '수요일' },
     { key: 'thu', short: '목', full: '목요일' },
     { key: 'fri', short: '금', full: '금요일' },
-    { key: 'sat', short: '토', full: '토요일' },
+    { key: 'sat', short: '토', full: '토요일', defaultHoliday: true },
   ];
 
   const WEEKLY_OT_CAP = 12;
@@ -56,7 +56,7 @@
         <div class="ot-day-full">${d.full}</div>
       </div>
       <label class="ot-holiday-toggle">
-        <input type="checkbox" class="ot-holiday-check" />
+        <input type="checkbox" class="ot-holiday-check" ${d.defaultHoliday ? 'checked' : ''} />
         <span class="ot-label-text">휴일</span>
       </label>
       <label class="ot-calteo-toggle">
