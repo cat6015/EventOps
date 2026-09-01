@@ -200,12 +200,25 @@ th { color: #6b7280; font-weight: 600; }
   gap: 8px;
 }
 .ot-day-card.is-holiday { border-top-color: #d1242f; }
+.ot-day-card.is-excluded { background: #f7f8fa; }
 .ot-day-card .ot-day-name { font-weight: 700; font-size: 0.95rem; }
 .ot-day-card.is-sun .ot-day-name, .ot-day-card.is-holiday .ot-day-name { color: #d1242f; }
 .ot-day-card .ot-day-full { font-size: 0.68rem; color: #6b7280; margin-top: -6px; }
 
-.ot-holiday-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #6b7280; cursor: pointer; user-select: none; }
-.ot-holiday-toggle input {
+.ot-exclude-toggle, .ot-holiday-toggle, .ot-calteo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #6b7280;
+  cursor: pointer;
+  user-select: none;
+}
+.ot-exclude-toggle.is-disabled, .ot-holiday-toggle.is-disabled, .ot-calteo-toggle.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.ot-exclude-toggle input, .ot-holiday-toggle input, .ot-calteo-toggle input {
   appearance: none;
   -webkit-appearance: none;
   width: 28px;
@@ -218,7 +231,7 @@ th { color: #6b7280; font-weight: 600; }
   flex: none;
   transition: background 0.15s ease;
 }
-.ot-holiday-toggle input::after {
+.ot-exclude-toggle input::after, .ot-holiday-toggle input::after, .ot-calteo-toggle input::after {
   content: "";
   position: absolute;
   top: 1px;
@@ -230,42 +243,18 @@ th { color: #6b7280; font-weight: 600; }
   box-shadow: 0 1px 2px rgba(0,0,0,0.25);
   transition: transform 0.15s ease;
 }
+.ot-exclude-toggle input:checked::after, .ot-holiday-toggle input:checked::after, .ot-calteo-toggle input:checked::after {
+  transform: translateX(12px);
+}
+.ot-exclude-toggle input:checked { background: #374151; border-color: #374151; }
+.ot-exclude-toggle .ot-label-on { color: #374151; font-weight: 600; }
 .ot-holiday-toggle input:checked { background: #d1242f; border-color: #d1242f; }
-.ot-holiday-toggle input:checked::after { transform: translateX(12px); }
 .ot-holiday-toggle .ot-label-on { color: #d1242f; font-weight: 600; }
-
-.ot-calteo-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #6b7280; cursor: pointer; user-select: none; }
-.ot-calteo-toggle.is-disabled { opacity: 0.4; pointer-events: none; }
-.ot-calteo-toggle input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 28px;
-  height: 16px;
-  border-radius: 999px;
-  background: #e5e7eb;
-  border: 1px solid #d1d5db;
-  position: relative;
-  cursor: pointer;
-  flex: none;
-  transition: background 0.15s ease;
-}
-.ot-calteo-toggle input::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
-  transition: transform 0.15s ease;
-}
 .ot-calteo-toggle input:checked { background: #1a7f37; border-color: #1a7f37; }
-.ot-calteo-toggle input:checked::after { transform: translateX(12px); }
 .ot-calteo-toggle .ot-label-on { color: #1a7f37; font-weight: 600; }
 
 .ot-time-row { display: flex; flex-direction: column; gap: 6px; }
+.ot-time-row.is-disabled { opacity: 0.4; pointer-events: none; }
 .ot-time-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.66rem; color: #6b7280; }
 .ot-time-field input[type="time"] {
   width: 100%;
