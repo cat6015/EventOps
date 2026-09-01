@@ -263,10 +263,23 @@ th { color: #6b7280; font-weight: 600; }
 .ot-calteo-toggle input:checked::after { transform: translateX(12px); }
 .ot-calteo-toggle .ot-label-on { color: #1a7f37; font-weight: 600; }
 
-.ot-hours-select, .ot-checkin-select { width: 100%; font-size: 0.85rem; font-weight: 600; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; background: #f7f8fa; }
+.ot-time-row { display: flex; gap: 6px; }
+.ot-time-field { flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; font-size: 0.66rem; color: #6b7280; }
+.ot-time-field input[type="time"] {
+  width: 100%;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 5px 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: #1f2933;
+}
+.ot-time-field input[type="time"]:focus-visible { outline: 2px solid #1f6feb; outline-offset: 1px; }
 
-.ot-checkin-wrap { display: flex; flex-direction: column; gap: 4px; }
-.ot-checkin-note { font-size: 0.66rem; color: #1a7f37; line-height: 1.4; }
+.ot-day-note { font-size: 0.66rem; color: #6b7280; line-height: 1.4; }
+.ot-day-note:empty { display: none; }
 
 .ot-day-result { font-size: 0.7rem; color: #6b7280; border-top: 1px dashed #e5e7eb; padding-top: 6px; }
 .ot-day-result .ot-val { color: #1f2933; font-weight: 600; }
