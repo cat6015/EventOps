@@ -2,31 +2,20 @@
   const grid = document.getElementById('ot-day-grid');
   if (!grid) return;
 
-  async function api(path, options) {
-    const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || '요청에 실패했습니다.');
-    return data;
-  }
-
-  async function loadMe() {
-    const data = await api('/api/me');
-    if (!data.loggedIn || data.user.role !== 'admin') {
-      window.location.href = '/login.html';
-      return;
-    }
-    document.getElementById('me-name').textContent = `${data.user.displayName} (관리자)`;
-  }
-
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', async () => {
-      await api('/api/logout', { method: 'POST' });
-      window.location.href = '/login.html';
+  // 배치도 관리 화면(editor.html)에 탭으로 붙는 경우: 탭 버튼 클릭 시 패널 전환.
+  // (로그인/관리자 권한 확인과 로그아웃 버튼은 이미 editor.js가 처리한다.)
+  const pageTabs = document.getElementById('page-tabs');
+  if (pageTabs) {
+    pageTabs.querySelectorAll('.page-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        pageTabs.querySelectorAll('.page-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-panel').forEach((panel) => {
+          panel.hidden = panel.id !== btn.dataset.tabTarget;
+        });
+      });
     });
   }
-
-  loadMe();
 
   const DAYS = [
     { key: 'sun', short: '일', full: '일요일', isSun: true },

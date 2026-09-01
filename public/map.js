@@ -26,7 +26,6 @@
     meName: document.getElementById('me-name'),
     navEditor: document.getElementById('nav-editor'),
     navUsers: document.getElementById('nav-users'),
-    navOtCalculator: document.getElementById('nav-ot-calculator'),
     eventSelect: document.getElementById('event-select'),
     installStartBtn: document.getElementById('install-start-btn'),
     todayStaffPanel: document.getElementById('today-staff-panel'),
@@ -93,7 +92,6 @@
     if (data.user.role === 'admin') {
       el.navEditor.hidden = false;
       el.navUsers.hidden = false;
-      el.navOtCalculator.hidden = false;
       el.installStartBtn.hidden = false;
     }
   }
