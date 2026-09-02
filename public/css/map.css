@@ -241,6 +241,23 @@
 }
 .active-as-chip:hover { background: #fee2e2; }
 
+/* "온보딩미진행" 탭을 볼 때는 같은 배너를 A/S(빨강) 대신 온보딩(주황) 톤으로 재사용한다. */
+.active-as-banner.is-onboarding { background: #fffbeb; border-color: #fde68a; }
+.active-as-banner.is-onboarding strong { color: #92650a; }
+.active-as-banner.is-onboarding .active-as-chip { border-color: #fcd34d; color: #92650a; }
+.active-as-banner.is-onboarding .active-as-chip:hover { background: #fef3c7; }
+
+.tab-onboarding-badge {
+  display: inline-block;
+  background: #f59e0b;
+  color: white;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
 .select-box {
   position: absolute;
   border: 1px dashed #1f6feb;

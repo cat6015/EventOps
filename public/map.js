@@ -22,6 +22,7 @@
     reportBoothByLabel: new Map(),
     otSchedule: null, // OT 계산기(editor.html)에서 저장한 근무 일정 — "지금 근무 중" 계산에 쓴다
     selectedDate: null, // 담당자/근무 현황을 조회할 날짜(YYYY-MM-DD). 기본값은 오늘.
+    onboardingFilterOn: false, // "온보딩미진행" 탭이 켜져 있는지 — 켜지면 온보딩 미진행 부스만 지도에 보여준다
   };
 
   const el = {
@@ -35,6 +36,7 @@
     onDutyPanel: document.getElementById('on-duty-panel'),
     zoneTabs: document.getElementById('zone-tabs'),
     activeAsBanner: document.getElementById('active-as-banner'),
+    activeAsBannerTitle: document.getElementById('active-as-banner-title'),
     activeAsList: document.getElementById('active-as-list'),
     mapStage: document.getElementById('map-stage'),
     mapCanvas: document.getElementById('map-canvas'),
@@ -152,7 +154,14 @@
             const local = state.event.booths.find((x) => x.id === b.id);
             if (local) local.installStatus = b.installStatus;
           }
-          applyAlertsToMap();
+          // "온보딩미진행" 탭은 마커 자체를 필터링해서 보여주는 중이라, 다른 세션에서
+          // 온보딩완료 처리를 하면 그 부스가 화면에서 빠지도록 지도를 통째로 다시 그려야 한다
+          // (applyAlertsToMap은 이미 그려진 마커의 색/상태만 바꿀 뿐 마커 목록 자체는 바꾸지 않는다).
+          if (state.onboardingFilterOn) {
+            renderCurrentMap();
+          } else {
+            applyAlertsToMap();
+          }
         },
       });
     }
@@ -203,15 +212,27 @@
   }
 
   // 구역 탭에서는 zoneXPct/zoneYPct를, 전체 배치도 탭에서는 xPct/yPct를 그 탭의 좌표로 쓴다.
+  // "온보딩미진행" 탭이 켜져 있으면 그중에서도 온보딩 미진행 부스만 남긴다.
   function getViewBooths() {
     if (!state.event) return [];
     const zone = getActiveZone();
+    let booths;
     if (zone) {
-      return state.event.booths
+      booths = state.event.booths
         .filter((b) => b.zoneId === zone.id)
         .map((b) => ({ ...b, xPct: b.zoneXPct, yPct: b.zoneYPct }));
+    } else {
+      booths = state.event.booths;
     }
-    return state.event.booths;
+    if (state.onboardingFilterOn) {
+      booths = booths.filter((b) => b.installStatus === 'onboarding_needed');
+    }
+    return booths;
+  }
+
+  function getOnboardingPendingBooths() {
+    if (!state.event) return [];
+    return state.event.booths.filter((b) => b.installStatus === 'onboarding_needed');
   }
 
   function zoneOpenAlertCount(zoneId) {
@@ -220,28 +241,52 @@
   }
 
   function renderZoneTabs() {
-    if (!state.event || !(state.event.zones || []).length) {
+    if (!state.event) {
       el.zoneTabs.innerHTML = '';
       return;
     }
-    const zones = state.event.zones;
-    const tabs = [`<button data-zone-id="" class="${state.activeZoneId ? '' : 'active'}">전체 배치도</button>`];
+    const zones = state.event.zones || [];
+    const overviewActive = !state.activeZoneId && !state.onboardingFilterOn;
+    const tabs = [`<button data-zone-id="" class="${overviewActive ? 'active' : ''}">전체 배치도</button>`];
     zones.forEach((z) => {
       const count = zoneOpenAlertCount(z.id);
       const badge = count > 0 ? ` <span class="tab-alert-badge">${count}</span>` : '';
-      const classes = [state.activeZoneId === z.id ? 'active' : '', count > 0 ? 'has-alert' : ''].filter(Boolean).join(' ');
+      const isActive = !state.onboardingFilterOn && state.activeZoneId === z.id;
+      const classes = [isActive ? 'active' : '', count > 0 ? 'has-alert' : ''].filter(Boolean).join(' ');
       tabs.push(
         `<button data-zone-id="${z.id}" class="${classes}">${escapeHtml(z.name)}${badge}</button>`
       );
     });
+    const pendingCount = getOnboardingPendingBooths().length;
+    const pendingBadge = pendingCount > 0 ? ` <span class="tab-onboarding-badge">${pendingCount}</span>` : '';
+    tabs.push(
+      `<button data-mode="onboarding" class="${state.onboardingFilterOn ? 'active' : ''}">온보딩미진행${pendingBadge}</button>`
+    );
     el.zoneTabs.innerHTML = tabs.join('');
     el.zoneTabs.querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', () => switchZoneTab(btn.dataset.zoneId || null));
+      if (btn.dataset.mode === 'onboarding') {
+        btn.addEventListener('click', switchToOnboardingFilter);
+      } else {
+        btn.addEventListener('click', () => switchZoneTab(btn.dataset.zoneId || null));
+      }
     });
   }
 
   function switchZoneTab(zoneId) {
     state.activeZoneId = zoneId || null;
+    state.onboardingFilterOn = false;
+    resetZoom();
+    closePopover();
+    renderZoneTabs();
+    renderTodayStaffPanel();
+    renderOnDutyPanel();
+    renderCurrentMap();
+  }
+
+  // "온보딩미진행" 탭: 구역 선택을 해제하고 전체 배치도 위에 온보딩 미진행 부스만 남겨서 보여준다.
+  function switchToOnboardingFilter() {
+    state.activeZoneId = null;
+    state.onboardingFilterOn = true;
     resetZoom();
     closePopover();
     renderZoneTabs();
@@ -562,7 +607,10 @@
         markerEl.addEventListener('click', () => openPopover(boothId));
       }
     } else if ((state.event.zones || []).length > 0) {
-      const { boothMarkers, zoneMarkers } = window.MapRender.renderOverview(el.mapOverlay, state.event, { editable: false });
+      // "온보딩미진행" 탭이 켜져 있으면 온보딩 미진행 부스만 담은 사본을 넘겨서
+      // 전체 배치도 위에 그 부스들만(그리고 그 부스들의 반짝이는 표시만) 남긴다.
+      const overviewEvent = state.onboardingFilterOn ? { ...state.event, booths: state.viewBooths } : state.event;
+      const { boothMarkers, zoneMarkers } = window.MapRender.renderOverview(el.mapOverlay, overviewEvent, { editable: false });
       state.markers = boothMarkers;
       state.zoneMarkers = zoneMarkers;
       // 구역에 속한 부스를 클릭해도 이제 그 구역 탭으로 넘어가지 않고, 전체 배치도 위에서
@@ -574,7 +622,8 @@
         zoneEl.addEventListener('click', () => switchZoneTab(zoneId));
       }
     } else {
-      state.markers = window.MapRender.renderBase(el.mapOverlay, state.event, { editable: false });
+      const baseEvent = state.onboardingFilterOn ? { ...state.event, booths: state.viewBooths } : state.event;
+      state.markers = window.MapRender.renderBase(el.mapOverlay, baseEvent, { editable: false });
       for (const [boothId, markerEl] of state.markers) {
         markerEl.addEventListener('click', () => openPopover(boothId));
       }
@@ -872,6 +921,7 @@
       zoneEl.classList.toggle('has-alert', zoneOpenAlertCount(zoneId) > 0);
     }
     renderZoneTabs();
+    renderActiveAsBanner();
   }
 
   function renderOpenAlertsTable() {
@@ -906,8 +956,33 @@
     });
   }
 
-  // 지도 상단에 진행중인 A/S를 한눈에 보여주는 배너(클릭하면 해당 부스 위치로 이동)
+  // 지도 상단 배너: 평소엔 진행중인 A/S를, "온보딩미진행" 탭이 켜져 있으면 온보딩 미진행
+  // 부스(번호+매장명) 목록을 같은 자리에 보여준다(클릭하면 해당 부스 위치로 이동).
   function renderActiveAsBanner() {
+    if (state.onboardingFilterOn) {
+      el.activeAsBanner.classList.add('is-onboarding');
+      const pending = getOnboardingPendingBooths();
+      el.activeAsBannerTitle.textContent = `온보딩 미진행 부스 (${pending.length}건)`;
+      if (pending.length === 0) {
+        el.activeAsBanner.hidden = true;
+        el.activeAsList.innerHTML = '';
+        return;
+      }
+      el.activeAsBanner.hidden = false;
+      el.activeAsList.innerHTML = pending
+        .map(
+          (b) =>
+            `<button type="button" class="active-as-chip" data-booth-id="${b.id}">${escapeHtml(b.number)}${b.storeName ? ' · ' + escapeHtml(b.storeName) : ''}</button>`
+        )
+        .join('');
+      el.activeAsList.querySelectorAll('.active-as-chip').forEach((btn) => {
+        btn.addEventListener('click', () => locateBooth(btn.dataset.boothId));
+      });
+      return;
+    }
+
+    el.activeAsBanner.classList.remove('is-onboarding');
+    el.activeAsBannerTitle.textContent = '진행중인 A/S';
     if (state.openAlerts.length === 0) {
       el.activeAsBanner.hidden = true;
       el.activeAsList.innerHTML = '';
