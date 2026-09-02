@@ -185,6 +185,21 @@
 .today-staff-panel .staff-zone { font-weight: 700; color: #92650a; min-width: 64px; }
 .today-staff-panel .staff-empty { color: #9ca3af; }
 
+.on-duty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #e6f4ea;
+  border: 1px solid #b7e0c4;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+.on-duty-panel .on-duty-title { font-weight: 700; color: #1a7f37; }
+.on-duty-panel .staff-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.on-duty-panel .on-duty-assign-btn { font-size: 0.78rem; padding: 4px 10px; }
+
 .active-as-banner {
   display: flex;
   flex-direction: column;
@@ -357,6 +372,9 @@
 
   .today-staff-panel { padding: 6px 10px; margin-bottom: 8px; gap: 3px; font-size: 0.74rem; }
   .today-staff-panel .staff-zone { min-width: 44px; }
+
+  .on-duty-panel { padding: 6px 10px; margin-bottom: 8px; gap: 3px; font-size: 0.74rem; }
+  .on-duty-panel .on-duty-assign-btn { font-size: 0.7rem; padding: 3px 8px; }
 
   .active-as-banner { padding: 6px 10px; margin-bottom: 8px; gap: 4px; font-size: 0.74rem; }
   .active-as-chip { padding: 3px 8px; font-size: 0.7rem; }
