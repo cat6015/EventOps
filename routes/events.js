@@ -438,6 +438,19 @@ router.patch('/events/:id/booths/:boothId/install-status', (req, res) => {
   }
 
   const updated = store.setBoothInstallStatus(event.id, booth.id, installStatus);
+  if (installStatus === 'installed') {
+    store.addOnboardingLog(event.id, {
+      boothId: updated.id,
+      boothNumber: updated.number,
+      zoneId: updated.zoneId,
+      storeName: updated.storeName,
+      businessNumber: updated.businessNumber,
+      corpNumber: updated.corpNumber,
+      van: updated.van,
+      completedBy: req.session.user.username,
+      completedByName: req.session.user.displayName,
+    });
+  }
   broadcastToEvent(event.id, 'booths:install-updated', { booths: [updated] });
   res.json({ ok: true, booth: updated });
 });

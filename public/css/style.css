@@ -103,9 +103,11 @@ table { width: 100%; border-collapse: collapse; margin-top: 12px; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; vertical-align: middle; }
 th { color: #6b7280; font-weight: 600; }
 
-.scroll-box { max-height: 420px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+.scroll-box { max-height: 420px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
 .scroll-box table { margin-top: 0; }
 .scroll-box thead th { position: sticky; top: 0; background: #fafbfc; z-index: 1; }
+
+.onboarding-log-table th, .onboarding-log-table td { white-space: nowrap; }
 
 .role-select {
   padding: 4px 6px;

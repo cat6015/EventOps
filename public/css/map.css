@@ -362,6 +362,7 @@
 .legend-dot.alert { background: #dc2626; }
 
 .event-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.event-picker input[type="date"] { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.85rem; }
 
 .booth-list-table td.num { font-weight: 600; }
 
