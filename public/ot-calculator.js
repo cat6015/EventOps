@@ -417,16 +417,15 @@
           }
 
           const rawSpanHours = Math.max(0, (checkoutMin - checkinMin) / 60);
-          // 휴일 근무는 근무시간 전체가 OT라 식사시간을 빼지 않고, 그 외(평일/칼퇴)는 1시간을 뺀다.
-          worked = isHoliday ? rawSpanHours : Math.max(0, rawSpanHours - MEAL_BREAK_HOURS);
+          // 평일/휴일/칼퇴 모두 출근~퇴근 시간에서 식사시간 1시간을 뺀 만큼을 근무시간으로 본다.
+          worked = Math.max(0, rawSpanHours - MEAL_BREAK_HOURS);
           checkinDisplay = checkinInput.value || '--:--';
           checkoutDisplay = minutesToLabel(checkoutMin);
 
           if (isCalteo) {
             noteText = `퇴근 ${checkoutDisplay} · ${fmt(rawSpanHours)}시간(식사시간 1시간 포함) · 실근무 ${fmt(worked)}시간 · OT 0시간`;
           } else {
-            const mealNote = isHoliday ? '' : ' · 식사시간 1시간 차감';
-            noteText = `${checkinDisplay} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간${mealNote}`;
+            noteText = `${checkinDisplay} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간 · 식사시간 1시간 차감`;
           }
         }
         cell.querySelector('.ot-day-note').textContent = noteText;
