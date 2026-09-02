@@ -187,35 +187,23 @@ th { color: #6b7280; font-weight: 600; }
 /* OT(연장근무) 계산기 */
 .ot-toolbar { display: flex; justify-content: flex-end; margin-top: 4px; }
 
-/* 요일 하나가 한 행 전체를 차지하고, 그 안에 조 A/B 블록이 나란히(좁으면 아래로 줄바꿈) 배치된다.
-   가로 스크롤 없이 화면 폭에 맞춰 조 블록 수가 자동으로 줄어든다. */
-.ot-day-grid { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 20px; }
-
-.ot-day-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 12px 14px;
-}
-.ot-day-card.is-holiday { border-left: 3px solid #d1242f; }
-.ot-day-card .ot-day-name { font-weight: 700; font-size: 0.95rem; }
-.ot-day-card.is-sun .ot-day-name, .ot-day-card.is-holiday .ot-day-name { color: #d1242f; }
-.ot-day-card .ot-day-full { font-size: 0.68rem; color: #6b7280; margin-top: -6px; }
-
-.ot-day-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
-
-.ot-team-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.ot-team-block {
-  flex: 1 1 220px;
-  min-width: 200px;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.ot-team-block.is-excluded { background: #f7f8fa; }
-.ot-team-title { font-weight: 700; font-size: 0.8rem; color: #1f6feb; }
+/* 일~토가 열, 조 A/조 B가 행인 표. 좁은 화면에서는 표 자체가 최소 너비를 갖고
+   가로 스크롤이 생긴다(엑셀 같은 표라 세로로 접는 것보다 이 편이 더 보기 쉽다). */
+.ot-day-grid { overflow-x: auto; margin: 16px 0 20px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.ot-week-table { width: 100%; min-width: 900px; border-collapse: collapse; }
+.ot-week-table th, .ot-week-table td { border: 1px solid #e5e7eb; padding: 8px 6px; vertical-align: top; text-align: left; }
+.ot-week-table thead th { background: #fafbfc; text-align: center; }
+.ot-week-table thead th.is-holiday { background: #fdecea; }
+.ot-week-row-label { background: #fafbfc; font-weight: 700; font-size: 0.8rem; color: #1f6feb; white-space: nowrap; padding-left: 10px; }
+.ot-day-header { min-width: 110px; }
+.ot-day-header > * + * { margin-top: 4px; }
+.ot-day-header .ot-holiday-toggle { justify-content: center; }
+.ot-day-header-name { font-weight: 700; font-size: 0.9rem; }
+.ot-day-header-name.is-sun, th.is-holiday .ot-day-header-name { color: #d1242f; }
+.ot-day-header-full { font-size: 0.64rem; color: #6b7280; }
+.ot-day-cell { min-width: 110px; }
+.ot-day-cell.is-excluded { background: #f7f8fa; }
+.ot-day-cell > * + * { margin-top: 8px; }
 
 .ot-exclude-toggle, .ot-holiday-toggle, .ot-calteo-toggle {
   display: flex;
@@ -320,3 +308,5 @@ th { color: #6b7280; font-weight: 600; }
 
 .ot-subheading { font-weight: 700; font-size: 0.92rem; margin: 22px 0 6px; }
 tr.ot-person-row-over td { color: #b91c1c; font-weight: 600; }
+.ot-person-entries { font-size: 0.74rem; min-width: 220px; }
+.ot-person-entries div + div { margin-top: 3px; }
