@@ -287,7 +287,11 @@ th { color: #6b7280; font-weight: 600; }
   background: white;
 }
 .ot-people-list label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #1f2933; cursor: pointer; }
+.ot-people-list label.is-taken { opacity: 0.45; cursor: not-allowed; }
 .ot-people-empty { font-size: 0.7rem; color: #6b7280; }
+
+.ot-people-selected { font-size: 0.72rem; font-weight: 600; color: #1f2933; line-height: 1.4; }
+.ot-people-selected:empty { display: none; }
 
 .ot-day-note { font-size: 0.66rem; color: #6b7280; line-height: 1.4; }
 .ot-day-note:empty { display: none; }

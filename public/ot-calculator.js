@@ -25,13 +25,15 @@
     { key: 'a', label: '조 A', short: 'A' },
     { key: 'b', label: '조 B', short: 'B' },
   ];
+  const OTHER_TEAM = { a: 'b', b: 'a' };
 
   const WEEKLY_OT_CAP = 12;
   const BASE_HOURS = 8;
+  const MEAL_BREAK_HOURS = 1; // 평일/칼퇴 모두 근무시간(출근~퇴근)에서 식사시간 1시간을 뺀다
   const CALTEO_SPAN_MINUTES = 9 * 60; // 9시간(식사시간 1시간 포함) => 실근무 8시간
   const MAX_RANGE_DAYS = 31;
   const WEEKDAY_CHARS = ['일', '월', '화', '수', '목', '금', '토'];
-  const STORE_KEY = 'admin-ot-calc-week-v7';
+  const STORE_KEY = 'admin-ot-calc-week-v8';
 
   let roster = []; // [{ username, displayName }]
   let DAYS = []; // 선택된 기간에 속한 날짜들. { key, short, weekday, full, isSun, defaultHoliday, excludable, defaultExcluded }
@@ -158,6 +160,7 @@
         <summary class="ot-people-summary">인원 선택 (0명)</summary>
         <div class="ot-people-list">불러오는 중...</div>
       </details>
+      <div class="ot-people-selected"></div>
       <div class="ot-day-note"></div>
       <div class="ot-day-result">
         근무 <span class="ot-worked-val">0.0h</span> · 정규 <span class="ot-reg-val">0.0h</span> · OT <span class="ot-val">0.0h</span>
@@ -311,9 +314,21 @@
     return { isExcluded, isCalteo };
   }
 
+  // 체크된 인원의 이름을 <details>를 열지 않아도 바로 보이게 칸에 표시한다("한눈에 확인").
   function updatePeopleSummary(cell) {
-    const count = cell.querySelectorAll('.ot-person-check:checked').length;
-    cell.querySelector('.ot-people-summary').textContent = `인원 선택 (${count}명)`;
+    const checked = Array.from(cell.querySelectorAll('.ot-person-check:checked'));
+    cell.querySelector('.ot-people-summary').textContent = `인원 선택 (${checked.length}명)`;
+    const names = checked.map((cb) => cb.closest('label').textContent.trim());
+    cell.querySelector('.ot-people-selected').textContent = names.join(', ');
+  }
+
+  // 같은 날짜의 다른 조에 이미 배정된 사람은 이 조에서 체크할 수 없게 막는다(중복 배정 방지).
+  function updatePeopleAvailability(cell, otherChecked) {
+    cell.querySelectorAll('.ot-person-check').forEach((cb) => {
+      const isTaken = !cb.checked && otherChecked.has(cb.value);
+      cb.disabled = isTaken;
+      cb.closest('label').classList.toggle('is-taken', isTaken);
+    });
   }
 
   function entryLabel(e) {
@@ -339,6 +354,12 @@
 
       TEAMS.forEach((t) => {
         const cell = dayCellOf(t.key, d.key);
+        const otherCell = dayCellOf(OTHER_TEAM[t.key], d.key);
+        const otherChecked = new Set(
+          Array.from(otherCell.querySelectorAll('.ot-person-check:checked')).map((cb) => cb.value)
+        );
+        updatePeopleAvailability(cell, otherChecked);
+
         const { isExcluded, isCalteo } = syncTeamCell(cell, isHoliday);
         cell.classList.toggle('is-excluded', isExcluded);
         cell.querySelector('.ot-calteo-toggle .ot-label-text').classList.toggle('ot-label-on', isCalteo);
@@ -357,17 +378,22 @@
           let checkoutMin;
           if (isCalteo) {
             checkoutMin = checkinMin + CALTEO_SPAN_MINUTES; // 9시간(식사시간 1시간 포함) => 실근무 8시간
-            noteText = `퇴근 ${minutesToLabel(checkoutMin)} · 9시간(식사시간 포함) · 실근무 8시간 · OT 0시간`;
           } else {
             checkoutMin = parseTimeToMinutes(checkoutInput.value) ?? checkinMin;
             if (checkoutMin < checkinMin) checkoutMin += 24 * 60; // 다음날 새벽 퇴근 등 자정을 넘기는 경우
           }
 
-          worked = Math.max(0, (checkoutMin - checkinMin) / 60);
+          const rawSpanHours = Math.max(0, (checkoutMin - checkinMin) / 60);
+          // 휴일 근무는 근무시간 전체가 OT라 식사시간을 빼지 않고, 그 외(평일/칼퇴)는 1시간을 뺀다.
+          worked = isHoliday ? rawSpanHours : Math.max(0, rawSpanHours - MEAL_BREAK_HOURS);
           checkinDisplay = checkinInput.value || '--:--';
           checkoutDisplay = minutesToLabel(checkoutMin);
-          if (!isCalteo) {
-            noteText = `${checkinDisplay} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간`;
+
+          if (isCalteo) {
+            noteText = `퇴근 ${checkoutDisplay} · ${fmt(rawSpanHours)}시간(식사시간 1시간 포함) · 실근무 ${fmt(worked)}시간 · OT 0시간`;
+          } else {
+            const mealNote = isHoliday ? '' : ' · 식사시간 1시간 차감';
+            noteText = `${checkinDisplay} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간${mealNote}`;
           }
         }
         cell.querySelector('.ot-day-note').textContent = noteText;
