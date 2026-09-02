@@ -28,14 +28,14 @@
   ];
 
   const TEAMS = [
-    { key: 'a', label: '조 A' },
-    { key: 'b', label: '조 B' },
+    { key: 'a', label: '조 A', short: 'A' },
+    { key: 'b', label: '조 B', short: 'B' },
   ];
 
   const WEEKLY_OT_CAP = 12;
   const BASE_HOURS = 8;
   const CALTEO_SPAN_MINUTES = 9 * 60; // 9시간(식사시간 1시간 포함) => 실근무 8시간
-  const STORE_KEY = 'admin-ot-calc-week-v5';
+  const STORE_KEY = 'admin-ot-calc-week-v6';
 
   let roster = []; // [{ username, displayName }]
 
@@ -61,62 +61,70 @@
     return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function teamBlockHtml(d, team) {
+  function headerCellHtml(d) {
     return `
-      <div class="ot-team-block" data-team="${team.key}">
-        <div class="ot-team-title">${team.label}</div>
-        ${d.excludable ? `
-        <label class="ot-exclude-toggle">
-          <input type="checkbox" class="ot-exclude-check" ${d.defaultExcluded ? 'checked' : ''} />
-          <span class="ot-label-text">근무 제외</span>
-        </label>` : ''}
-        <label class="ot-calteo-toggle">
-          <input type="checkbox" class="ot-calteo-check" />
-          <span class="ot-label-text">칼퇴</span>
+      <div class="ot-day-header-name${d.isSun ? ' is-sun' : ''}">${d.short}</div>
+      <div class="ot-day-header-full">${d.full}</div>
+      <label class="ot-holiday-toggle">
+        <input type="checkbox" class="ot-holiday-check" ${d.defaultHoliday ? 'checked' : ''} />
+        <span class="ot-label-text">휴일</span>
+      </label>
+    `;
+  }
+
+  function dayCellHtml(d) {
+    return `
+      ${d.excludable ? `
+      <label class="ot-exclude-toggle">
+        <input type="checkbox" class="ot-exclude-check" ${d.defaultExcluded ? 'checked' : ''} />
+        <span class="ot-label-text">근무 제외</span>
+      </label>` : ''}
+      <label class="ot-calteo-toggle">
+        <input type="checkbox" class="ot-calteo-check" />
+        <span class="ot-label-text">칼퇴</span>
+      </label>
+      <div class="ot-time-row">
+        <label class="ot-time-field">
+          <span class="ot-time-caption">출근</span>
+          <input type="time" class="ot-checkin-time" value="09:00" />
         </label>
-        <div class="ot-time-row">
-          <label class="ot-time-field">
-            <span class="ot-time-caption">출근</span>
-            <input type="time" class="ot-checkin-time" value="09:00" />
-          </label>
-          <label class="ot-time-field ot-checkout-field">
-            <span class="ot-time-caption">퇴근</span>
-            <input type="time" class="ot-checkout-time" value="18:00" />
-          </label>
-        </div>
-        <details class="ot-people-picker">
-          <summary class="ot-people-summary">인원 선택 (0명)</summary>
-          <div class="ot-people-list">불러오는 중...</div>
-        </details>
-        <div class="ot-day-note"></div>
-        <div class="ot-day-result">
-          근무 <span class="ot-worked-val">0.0h</span> · 정규 <span class="ot-reg-val">0.0h</span> · OT <span class="ot-val">0.0h</span>
-        </div>
+        <label class="ot-time-field ot-checkout-field">
+          <span class="ot-time-caption">퇴근</span>
+          <input type="time" class="ot-checkout-time" value="18:00" />
+        </label>
+      </div>
+      <details class="ot-people-picker">
+        <summary class="ot-people-summary">인원 선택 (0명)</summary>
+        <div class="ot-people-list">불러오는 중...</div>
+      </details>
+      <div class="ot-day-note"></div>
+      <div class="ot-day-result">
+        근무 <span class="ot-worked-val">0.0h</span> · 정규 <span class="ot-reg-val">0.0h</span> · OT <span class="ot-val">0.0h</span>
       </div>
     `;
   }
 
-  DAYS.forEach((d) => {
-    const card = document.createElement('div');
-    card.className = 'ot-day-card' + (d.isSun ? ' is-sun' : '');
-    card.dataset.key = d.key;
-    card.innerHTML = `
-      <div class="ot-day-head">
-        <div>
-          <div class="ot-day-name">${d.short}</div>
-          <div class="ot-day-full">${d.full}</div>
-        </div>
-        <label class="ot-holiday-toggle">
-          <input type="checkbox" class="ot-holiday-check" ${d.defaultHoliday ? 'checked' : ''} />
-          <span class="ot-label-text">휴일</span>
-        </label>
-      </div>
-      <div class="ot-team-row">
-        ${TEAMS.map((t) => teamBlockHtml(d, t)).join('')}
-      </div>
-    `;
-    grid.appendChild(card);
-  });
+  const table = document.createElement('table');
+  table.className = 'ot-week-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th class="ot-week-row-label"></th>
+        ${DAYS.map((d) => `<th class="ot-day-header" data-day="${d.key}">${headerCellHtml(d)}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${TEAMS.map(
+        (t) => `
+        <tr data-team="${t.key}">
+          <td class="ot-week-row-label">${t.label}</td>
+          ${DAYS.map((d) => `<td class="ot-day-cell" data-day="${d.key}">${dayCellHtml(d)}</td>`).join('')}
+        </tr>
+      `
+      ).join('')}
+    </tbody>
+  `;
+  grid.appendChild(table);
 
   function peopleListHtml() {
     if (!roster.length) return '<div class="ot-people-empty">등록된 계정이 없습니다.</div>';
@@ -129,7 +137,7 @@
   }
 
   function renderPeopleLists() {
-    grid.querySelectorAll('.ot-people-list').forEach((el) => {
+    table.querySelectorAll('.ot-people-list').forEach((el) => {
       el.innerHTML = peopleListHtml();
     });
   }
@@ -167,24 +175,27 @@
     }
   }
 
+  function dayCellOf(teamKey, dayKey) {
+    return table.querySelector(`tr[data-team="${teamKey}"] td[data-day="${dayKey}"]`);
+  }
+
   function readState() {
     const state = {};
-    grid.querySelectorAll('.ot-day-card').forEach((card) => {
+    DAYS.forEach((d) => {
+      const th = table.querySelector(`th[data-day="${d.key}"]`);
       const teams = {};
-      card.querySelectorAll('.ot-team-block').forEach((block) => {
-        const excludeCheck = block.querySelector('.ot-exclude-check');
-        teams[block.dataset.team] = {
+      TEAMS.forEach((t) => {
+        const cell = dayCellOf(t.key, d.key);
+        const excludeCheck = cell.querySelector('.ot-exclude-check');
+        teams[t.key] = {
           excluded: excludeCheck ? excludeCheck.checked : false,
-          calteo: block.querySelector('.ot-calteo-check').checked,
-          checkin: block.querySelector('.ot-checkin-time').value,
-          checkout: block.querySelector('.ot-checkout-time').value,
-          people: Array.from(block.querySelectorAll('.ot-person-check:checked')).map((cb) => cb.value),
+          calteo: cell.querySelector('.ot-calteo-check').checked,
+          checkin: cell.querySelector('.ot-checkin-time').value,
+          checkout: cell.querySelector('.ot-checkout-time').value,
+          people: Array.from(cell.querySelectorAll('.ot-person-check:checked')).map((cb) => cb.value),
         };
       });
-      state[card.dataset.key] = {
-        holiday: card.querySelector('.ot-holiday-check').checked,
-        teams,
-      };
+      state[d.key] = { holiday: th.querySelector('.ot-holiday-check').checked, teams };
     });
     return state;
   }
@@ -194,19 +205,19 @@
     DAYS.forEach((d) => {
       const s = saved[d.key];
       if (!s) return;
-      const card = grid.querySelector(`.ot-day-card[data-key="${d.key}"]`);
-      card.querySelector('.ot-holiday-check').checked = !!s.holiday;
+      const th = table.querySelector(`th[data-day="${d.key}"]`);
+      th.querySelector('.ot-holiday-check').checked = !!s.holiday;
       TEAMS.forEach((t) => {
         const ts = s.teams && s.teams[t.key];
         if (!ts) return;
-        const block = card.querySelector(`.ot-team-block[data-team="${t.key}"]`);
-        const excludeCheck = block.querySelector('.ot-exclude-check');
+        const cell = dayCellOf(t.key, d.key);
+        const excludeCheck = cell.querySelector('.ot-exclude-check');
         if (excludeCheck) excludeCheck.checked = !!ts.excluded;
-        block.querySelector('.ot-calteo-check').checked = !!ts.calteo;
-        if (ts.checkin) block.querySelector('.ot-checkin-time').value = ts.checkin;
-        if (ts.checkout) block.querySelector('.ot-checkout-time').value = ts.checkout;
+        cell.querySelector('.ot-calteo-check').checked = !!ts.calteo;
+        if (ts.checkin) cell.querySelector('.ot-checkin-time').value = ts.checkin;
+        if (ts.checkout) cell.querySelector('.ot-checkout-time').value = ts.checkout;
         if (Array.isArray(ts.people)) {
-          block.querySelectorAll('.ot-person-check').forEach((cb) => {
+          cell.querySelectorAll('.ot-person-check').forEach((cb) => {
             cb.checked = ts.people.includes(cb.value);
           });
         }
@@ -214,53 +225,66 @@
     });
   }
 
-  // 근무 제외/휴일 여부에 따라 조 블록 내 나머지 입력의 사용 가능 상태를 맞춘다.
-  function syncTeamBlock(block, isHoliday) {
-    const excludeCheck = block.querySelector('.ot-exclude-check');
+  // 근무 제외/휴일 여부에 따라 조 칸 내 나머지 입력의 사용 가능 상태를 맞춘다.
+  function syncTeamCell(cell, isHoliday) {
+    const excludeCheck = cell.querySelector('.ot-exclude-check');
     const isExcluded = !!excludeCheck && excludeCheck.checked;
 
-    const calteoToggle = block.querySelector('.ot-calteo-toggle');
-    const calteoCheck = block.querySelector('.ot-calteo-check');
-    const timeRow = block.querySelector('.ot-time-row');
+    const calteoToggle = cell.querySelector('.ot-calteo-toggle');
+    const calteoCheck = cell.querySelector('.ot-calteo-check');
+    const timeRow = cell.querySelector('.ot-time-row');
 
     calteoToggle.classList.toggle('is-disabled', isExcluded || isHoliday);
     if (isHoliday) calteoCheck.checked = false;
     timeRow.classList.toggle('is-disabled', isExcluded);
 
     const isCalteo = !isExcluded && !isHoliday && calteoCheck.checked;
-    block.querySelector('.ot-checkout-field').hidden = isCalteo;
+    cell.querySelector('.ot-checkout-field').hidden = isCalteo;
 
     return { isExcluded, isCalteo };
   }
 
-  function updatePeopleSummary(block) {
-    const count = block.querySelectorAll('.ot-person-check:checked').length;
-    block.querySelector('.ot-people-summary').textContent = `인원 선택 (${count}명)`;
+  function updatePeopleSummary(cell) {
+    const count = cell.querySelectorAll('.ot-person-check:checked').length;
+    cell.querySelector('.ot-people-summary').textContent = `인원 선택 (${count}명)`;
+  }
+
+  function entryLabel(e) {
+    let label = `${e.dayShort}(${e.teamShort}) ${e.checkin}→${e.checkout}`;
+    const tags = [];
+    if (e.isHoliday) tags.push('휴일');
+    if (e.isCalteo) tags.push('칼퇴');
+    if (tags.length) label += ` · ${tags.join('·')}`;
+    return label;
   }
 
   function recalc() {
     let totalWorked = 0;
     let totalRegular = 0;
     let totalOt = 0;
-    const personTotals = new Map(); // username -> { displayName, worked, regular, ot }
+    const personTotals = new Map(); // username -> { displayName, worked, regular, ot, entries: [] }
 
-    grid.querySelectorAll('.ot-day-card').forEach((card) => {
-      const isHoliday = card.querySelector('.ot-holiday-check').checked;
-      card.classList.toggle('is-holiday', isHoliday);
-      card.querySelector('.ot-holiday-toggle .ot-label-text').classList.toggle('ot-label-on', isHoliday);
+    DAYS.forEach((d) => {
+      const th = table.querySelector(`th[data-day="${d.key}"]`);
+      const isHoliday = th.querySelector('.ot-holiday-check').checked;
+      th.classList.toggle('is-holiday', isHoliday);
+      th.querySelector('.ot-holiday-toggle .ot-label-text').classList.toggle('ot-label-on', isHoliday);
 
-      card.querySelectorAll('.ot-team-block').forEach((block) => {
-        const { isExcluded, isCalteo } = syncTeamBlock(block, isHoliday);
-        block.classList.toggle('is-excluded', isExcluded);
-        block.querySelector('.ot-calteo-toggle .ot-label-text').classList.toggle('ot-label-on', isCalteo);
-        updatePeopleSummary(block);
+      TEAMS.forEach((t) => {
+        const cell = dayCellOf(t.key, d.key);
+        const { isExcluded, isCalteo } = syncTeamCell(cell, isHoliday);
+        cell.classList.toggle('is-excluded', isExcluded);
+        cell.querySelector('.ot-calteo-toggle .ot-label-text').classList.toggle('ot-label-on', isCalteo);
+        updatePeopleSummary(cell);
 
         let worked = 0;
         let noteText = '근무하지 않음(제외)';
+        let checkinDisplay = '--:--';
+        let checkoutDisplay = '--:--';
 
         if (!isExcluded) {
-          const checkinInput = block.querySelector('.ot-checkin-time');
-          const checkoutInput = block.querySelector('.ot-checkout-time');
+          const checkinInput = cell.querySelector('.ot-checkin-time');
+          const checkoutInput = cell.querySelector('.ot-checkout-time');
           const checkinMin = parseTimeToMinutes(checkinInput.value) ?? 0;
 
           let checkoutMin;
@@ -273,18 +297,20 @@
           }
 
           worked = Math.max(0, (checkoutMin - checkinMin) / 60);
+          checkinDisplay = checkinInput.value || '--:--';
+          checkoutDisplay = minutesToLabel(checkoutMin);
           if (!isCalteo) {
-            noteText = `${checkinInput.value || '--:--'} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간`;
+            noteText = `${checkinDisplay} → ${checkoutInput.value || '--:--'} · 근무 ${fmt(worked)}시간`;
           }
         }
-        block.querySelector('.ot-day-note').textContent = noteText;
+        cell.querySelector('.ot-day-note').textContent = noteText;
 
         const regular = isExcluded || isHoliday ? 0 : Math.min(worked, BASE_HOURS);
         const ot = isExcluded ? 0 : isHoliday ? worked : Math.max(0, worked - BASE_HOURS);
 
-        block.querySelector('.ot-worked-val').textContent = fmt(worked) + 'h';
-        block.querySelector('.ot-reg-val').textContent = fmt(regular) + 'h';
-        const otEl = block.querySelector('.ot-val');
+        cell.querySelector('.ot-worked-val').textContent = fmt(worked) + 'h';
+        cell.querySelector('.ot-reg-val').textContent = fmt(regular) + 'h';
+        const otEl = cell.querySelector('.ot-val');
         otEl.textContent = fmt(ot) + 'h';
         otEl.classList.toggle('has-ot', ot > 0);
 
@@ -293,13 +319,21 @@
         totalOt += ot;
 
         if (!isExcluded) {
-          block.querySelectorAll('.ot-person-check:checked').forEach((cb) => {
+          cell.querySelectorAll('.ot-person-check:checked').forEach((cb) => {
             const username = cb.value;
             const displayName = cb.closest('label').textContent.trim();
-            const entry = personTotals.get(username) || { displayName, worked: 0, regular: 0, ot: 0 };
+            const entry = personTotals.get(username) || { displayName, worked: 0, regular: 0, ot: 0, entries: [] };
             entry.worked += worked;
             entry.regular += regular;
             entry.ot += ot;
+            entry.entries.push({
+              dayShort: d.short,
+              teamShort: t.short,
+              checkin: checkinDisplay,
+              checkout: checkoutDisplay,
+              isHoliday,
+              isCalteo,
+            });
             personTotals.set(username, entry);
           });
         }
@@ -314,12 +348,13 @@
     const rows = Array.from(personTotals.entries()).sort((a, b) => a[1].displayName.localeCompare(b[1].displayName, 'ko'));
     let overCount = 0;
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="status-msg">조에 배정된 인원이 없습니다.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="status-msg">조에 배정된 인원이 없습니다.</td></tr>';
     } else {
       tbody.innerHTML = rows
         .map(([username, p]) => {
           const isOver = p.ot > WEEKLY_OT_CAP;
           if (isOver) overCount += 1;
+          const entriesHtml = p.entries.map((e) => `<div>${escapeHtml(entryLabel(e))}</div>`).join('');
           return `
             <tr class="${isOver ? 'ot-person-row-over' : ''}">
               <td>${escapeHtml(p.displayName)}</td>
@@ -327,6 +362,7 @@
               <td>${fmt(p.regular)}h</td>
               <td>${fmt(p.ot)}h</td>
               <td>${isOver ? `<span class="badge over-limit">초과 +${fmt(p.ot - WEEKLY_OT_CAP)}h</span>` : '<span class="badge active">정상</span>'}</td>
+              <td class="ot-person-entries">${entriesHtml}</td>
             </tr>
           `;
         })
@@ -349,15 +385,16 @@
   // 요일별 근무 제외/휴일/칼퇴/출퇴근시간/인원 선택을 모두 기본값으로 되돌린다.
   function resetToDefaults() {
     DAYS.forEach((d) => {
-      const card = grid.querySelector(`.ot-day-card[data-key="${d.key}"]`);
-      card.querySelector('.ot-holiday-check').checked = !!d.defaultHoliday;
-      card.querySelectorAll('.ot-team-block').forEach((block) => {
-        const excludeCheck = block.querySelector('.ot-exclude-check');
+      const th = table.querySelector(`th[data-day="${d.key}"]`);
+      th.querySelector('.ot-holiday-check').checked = !!d.defaultHoliday;
+      TEAMS.forEach((t) => {
+        const cell = dayCellOf(t.key, d.key);
+        const excludeCheck = cell.querySelector('.ot-exclude-check');
         if (excludeCheck) excludeCheck.checked = !!d.defaultExcluded;
-        block.querySelector('.ot-calteo-check').checked = false;
-        block.querySelector('.ot-checkin-time').value = '09:00';
-        block.querySelector('.ot-checkout-time').value = '18:00';
-        block.querySelectorAll('.ot-person-check').forEach((cb) => {
+        cell.querySelector('.ot-calteo-check').checked = false;
+        cell.querySelector('.ot-checkin-time').value = '09:00';
+        cell.querySelector('.ot-checkout-time').value = '18:00';
+        cell.querySelectorAll('.ot-person-check').forEach((cb) => {
           cb.checked = false;
         });
       });
