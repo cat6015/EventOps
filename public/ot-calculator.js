@@ -512,9 +512,28 @@
     recalc();
   }
 
+  // 입력할 때마다 localStorage에 자동 저장되긴 하지만(recalc() 끝에서), 사용자가
+  // "저장됨"을 눈으로 확인할 수 있도록 별도 저장 버튼과 시각 표시를 둔다.
+  function formatNow() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  const saveBtn = document.getElementById('ot-save-btn');
+  const saveStatus = document.getElementById('ot-save-status');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      persist(readState());
+      if (saveStatus) saveStatus.textContent = `저장됨 (${formatNow()}) · 이 브라우저에만 저장됩니다`;
+    });
+  }
+
   const resetBtn = document.getElementById('ot-reset-btn');
   if (resetBtn) {
-    resetBtn.addEventListener('click', resetToDefaults);
+    resetBtn.addEventListener('click', () => {
+      resetToDefaults();
+      if (saveStatus) saveStatus.textContent = '';
+    });
   }
   rangeStartInput.addEventListener('change', applyRange);
   rangeEndInput.addEventListener('change', applyRange);
