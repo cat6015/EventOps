@@ -17,15 +17,9 @@
     });
   }
 
-  const DAYS = [
-    { key: 'sun', short: '일', full: '일요일', isSun: true, defaultHoliday: true, excludable: true, defaultExcluded: true },
-    { key: 'mon', short: '월', full: '월요일' },
-    { key: 'tue', short: '화', full: '화요일' },
-    { key: 'wed', short: '수', full: '수요일' },
-    { key: 'thu', short: '목', full: '목요일' },
-    { key: 'fri', short: '금', full: '금요일' },
-    { key: 'sat', short: '토', full: '토요일', defaultHoliday: true, excludable: true, defaultExcluded: true },
-  ];
+  const rangeStartInput = document.getElementById('ot-range-start');
+  const rangeEndInput = document.getElementById('ot-range-end');
+  const rangeStatus = document.getElementById('ot-range-status');
 
   const TEAMS = [
     { key: 'a', label: '조 A', short: 'A' },
@@ -35,9 +29,12 @@
   const WEEKLY_OT_CAP = 12;
   const BASE_HOURS = 8;
   const CALTEO_SPAN_MINUTES = 9 * 60; // 9시간(식사시간 1시간 포함) => 실근무 8시간
-  const STORE_KEY = 'admin-ot-calc-week-v6';
+  const MAX_RANGE_DAYS = 31;
+  const WEEKDAY_CHARS = ['일', '월', '화', '수', '목', '금', '토'];
+  const STORE_KEY = 'admin-ot-calc-week-v7';
 
   let roster = []; // [{ username, displayName }]
+  let DAYS = []; // 선택된 기간에 속한 날짜들. { key, short, weekday, full, isSun, defaultHoliday, excludable, defaultExcluded }
 
   function minutesToLabel(mins) {
     const wrapped = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
@@ -61,10 +58,74 @@
     return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  function toDateObj(str) {
+    if (!str) return null;
+    const d = new Date(`${str}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function toDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // 저장된 기간이 없을 때: 오늘이 속한 일~토 한 주를 기본값으로 보여준다.
+  function defaultRange() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(today);
+    start.setDate(start.getDate() - today.getDay());
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { start: toDateStr(start), end: toDateStr(end) };
+  }
+
+  // 시작일~종료일 문자열로부터 그 기간에 속한 날짜 목록을 만든다.
+  // 범위가 비었거나 거꾸로거나 너무 길면 안전한 값으로 보정한다.
+  function buildDays(startStr, endStr) {
+    let start = toDateObj(startStr);
+    let end = toDateObj(endStr);
+    if (!start || !end) {
+      const def = defaultRange();
+      start = toDateObj(def.start);
+      end = toDateObj(def.end);
+    }
+    if (end < start) end = new Date(start);
+
+    let capped = false;
+    const maxEnd = new Date(start);
+    maxEnd.setDate(maxEnd.getDate() + (MAX_RANGE_DAYS - 1));
+    if (end > maxEnd) {
+      end = maxEnd;
+      capped = true;
+    }
+
+    const days = [];
+    const cur = new Date(start);
+    while (cur <= end) {
+      const dow = cur.getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      days.push({
+        key: toDateStr(cur),
+        short: `${cur.getMonth() + 1}/${cur.getDate()}`,
+        weekday: WEEKDAY_CHARS[dow],
+        full: `${cur.getFullYear()}년 ${cur.getMonth() + 1}월 ${cur.getDate()}일 (${WEEKDAY_CHARS[dow]})`,
+        isSun: dow === 0,
+        defaultHoliday: isWeekend,
+        excludable: isWeekend,
+        defaultExcluded: isWeekend,
+      });
+      cur.setDate(cur.getDate() + 1);
+    }
+    return { days, startStr: toDateStr(start), endStr: toDateStr(end), capped };
+  }
+
   function headerCellHtml(d) {
     return `
       <div class="ot-day-header-name${d.isSun ? ' is-sun' : ''}">${d.short}</div>
-      <div class="ot-day-header-full">${d.full}</div>
+      <div class="ot-day-header-full">${d.weekday}요일</div>
       <label class="ot-holiday-toggle">
         <input type="checkbox" class="ot-holiday-check" ${d.defaultHoliday ? 'checked' : ''} />
         <span class="ot-label-text">휴일</span>
@@ -106,25 +167,28 @@
 
   const table = document.createElement('table');
   table.className = 'ot-week-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th class="ot-week-row-label"></th>
-        ${DAYS.map((d) => `<th class="ot-day-header" data-day="${d.key}">${headerCellHtml(d)}</th>`).join('')}
-      </tr>
-    </thead>
-    <tbody>
-      ${TEAMS.map(
-        (t) => `
-        <tr data-team="${t.key}">
-          <td class="ot-week-row-label">${t.label}</td>
-          ${DAYS.map((d) => `<td class="ot-day-cell" data-day="${d.key}">${dayCellHtml(d)}</td>`).join('')}
-        </tr>
-      `
-      ).join('')}
-    </tbody>
-  `;
   grid.appendChild(table);
+
+  function renderTableBody() {
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th class="ot-week-row-label"></th>
+          ${DAYS.map((d) => `<th class="ot-day-header" data-day="${d.key}">${headerCellHtml(d)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${TEAMS.map(
+          (t) => `
+          <tr data-team="${t.key}">
+            <td class="ot-week-row-label">${t.label}</td>
+            ${DAYS.map((d) => `<td class="ot-day-cell" data-day="${d.key}">${dayCellHtml(d)}</td>`).join('')}
+          </tr>
+        `
+        ).join('')}
+      </tbody>
+    `;
+  }
 
   function peopleListHtml() {
     if (!roster.length) return '<div class="ot-people-empty">등록된 계정이 없습니다.</div>';
@@ -145,7 +209,7 @@
   // 인원 체크박스는 명단을 불러온 뒤에야 생겨서, 그 전에 실행되는 recalc()가 매번
   // "선택 인원 없음" 상태를 localStorage에 덮어써 버린다. 그래서 처음 불러온 저장값을
   // 그대로 들고 있다가, 명단이 준비된 뒤 그 값으로 다시 적용한다(localStorage를 다시 읽지 않음).
-  async function loadRoster(savedSnapshot) {
+  async function loadRoster(savedDaysSnapshot) {
     try {
       const res = await fetch('/api/admin/users', { headers: { 'Content-Type': 'application/json' } });
       const data = await res.json().catch(() => []);
@@ -154,7 +218,7 @@
       roster = [];
     }
     renderPeopleLists();
-    applySaved(savedSnapshot);
+    applySavedDays(savedDaysSnapshot);
     recalc();
   }
 
@@ -179,8 +243,9 @@
     return table.querySelector(`tr[data-team="${teamKey}"] td[data-day="${dayKey}"]`);
   }
 
+  // 화면에 지금 그려진 날짜(DAYS)들의 입력값 + 현재 선택된 기간을 읽어온다.
   function readState() {
-    const state = {};
+    const days = {};
     DAYS.forEach((d) => {
       const th = table.querySelector(`th[data-day="${d.key}"]`);
       const teams = {};
@@ -195,15 +260,17 @@
           people: Array.from(cell.querySelectorAll('.ot-person-check:checked')).map((cb) => cb.value),
         };
       });
-      state[d.key] = { holiday: th.querySelector('.ot-holiday-check').checked, teams };
+      days[d.key] = { holiday: th.querySelector('.ot-holiday-check').checked, teams };
     });
-    return state;
+    return { rangeStart: rangeStartInput.value, rangeEnd: rangeEndInput.value, days };
   }
 
-  function applySaved(saved) {
-    if (!saved) return;
+  // 날짜별 저장값(savedDays)을 지금 화면에 그려진 DAYS에 맞춰 되돌린다.
+  // savedDays는 { 'YYYY-MM-DD': { holiday, teams } } 형태 — 현재 표시된 기간 밖의 날짜는 무시된다.
+  function applySavedDays(savedDays) {
+    if (!savedDays) return;
     DAYS.forEach((d) => {
-      const s = saved[d.key];
+      const s = savedDays[d.key];
       if (!s) return;
       const th = table.querySelector(`th[data-day="${d.key}"]`);
       th.querySelector('.ot-holiday-check').checked = !!s.holiday;
@@ -327,7 +394,7 @@
             entry.regular += regular;
             entry.ot += ot;
             entry.entries.push({
-              dayShort: d.short,
+              dayShort: `${d.short}(${d.weekday})`,
               teamShort: t.short,
               checkin: checkinDisplay,
               checkout: checkoutDisplay,
@@ -374,7 +441,7 @@
     banner.classList.remove('status-bad');
     if (overCount > 0) {
       banner.classList.add('show', 'status-bad');
-      bannerText.innerHTML = `<b>${overCount}명</b>이 주 12시간 OT 한도를 초과했습니다. 근로기준법상 연장근무는 주 12시간을 넘길 수 없으니 배정을 조정하세요.`;
+      bannerText.innerHTML = `<b>${overCount}명</b>이 선택 기간 동안 주 12시간 OT 한도를 초과했습니다. 근로기준법상 연장근무는 주 12시간을 넘길 수 없으니 배정을 조정하세요.`;
     } else {
       banner.classList.remove('show');
     }
@@ -382,7 +449,7 @@
     persist(readState());
   }
 
-  // 요일별 근무 제외/휴일/칼퇴/출퇴근시간/인원 선택을 모두 기본값으로 되돌린다.
+  // 선택된 기간(DAYS)에 대해 근무 제외/휴일/칼퇴/출퇴근시간/인원 선택을 모두 기본값으로 되돌린다.
   function resetToDefaults() {
     DAYS.forEach((d) => {
       const th = table.querySelector(`th[data-day="${d.key}"]`);
@@ -402,14 +469,38 @@
     recalc();
   }
 
+  // 기간(시작일/종료일)이 바뀌면 표를 다시 그린다. 지금 화면에 입력돼 있던 값은
+  // 날짜별로 들고 있다가, 새 기간에도 같은 날짜가 있으면 그대로 복원한다.
+  function applyRange() {
+    const priorDays = readState().days;
+    const result = buildDays(rangeStartInput.value, rangeEndInput.value);
+    DAYS = result.days;
+    rangeStartInput.value = result.startStr;
+    rangeEndInput.value = result.endStr;
+    rangeStatus.textContent = result.capped
+      ? `기간은 최대 ${MAX_RANGE_DAYS}일까지 선택할 수 있어 종료일이 자동 조정되었습니다.`
+      : '';
+    renderTableBody();
+    renderPeopleLists();
+    applySavedDays(priorDays);
+    recalc();
+  }
+
   const resetBtn = document.getElementById('ot-reset-btn');
   if (resetBtn) {
     resetBtn.addEventListener('click', resetToDefaults);
   }
+  rangeStartInput.addEventListener('change', applyRange);
+  rangeEndInput.addEventListener('change', applyRange);
 
-  const initialSaved = loadSaved();
-  applySaved(initialSaved);
+  const initial = loadSaved() || {};
+  const initRange = buildDays(initial.rangeStart, initial.rangeEnd);
+  DAYS = initRange.days;
+  rangeStartInput.value = initRange.startStr;
+  rangeEndInput.value = initRange.endStr;
+  renderTableBody();
+  applySavedDays(initial.days);
   grid.addEventListener('change', recalc);
   recalc();
-  loadRoster(initialSaved);
+  loadRoster(initial.days);
 })();

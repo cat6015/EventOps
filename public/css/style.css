@@ -185,7 +185,9 @@ th { color: #6b7280; font-weight: 600; }
 }
 
 /* OT(연장근무) 계산기 */
-.ot-toolbar { display: flex; justify-content: flex-end; margin-top: 4px; }
+.ot-range-bar { margin-top: 4px; }
+.ot-range-bar label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #374151; }
+.ot-range-bar input[type="date"] { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.85rem; }
 
 /* 일~토가 열, 조 A/조 B가 행인 표. 좁은 화면에서는 표 자체가 최소 너비를 갖고
    가로 스크롤이 생긴다(엑셀 같은 표라 세로로 접는 것보다 이 편이 더 보기 쉽다). */
