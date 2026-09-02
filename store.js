@@ -9,6 +9,7 @@ const UPLOADS_DIR = path.join(STORAGE_DIR, 'uploads', 'floorplans');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const EVENTS_FILE = path.join(DATA_DIR, 'events.json');
 const ALERTS_FILE = path.join(DATA_DIR, 'alerts.json');
+const OT_SCHEDULE_FILE = path.join(DATA_DIR, 'ot-schedule.json');
 
 // 부스 사각형 기본 크기(%, 배치도 기준). 부스별로 개별/일괄 조정 가능.
 const DEFAULT_BOOTH_WIDTH_PCT = 6;
@@ -26,6 +27,7 @@ function init() {
   ensureFile(USERS_FILE, []);
   ensureFile(EVENTS_FILE, []);
   ensureFile(ALERTS_FILE, []);
+  ensureFile(OT_SCHEDULE_FILE, { rangeStart: null, rangeEnd: null, days: {}, updatedAt: null, updatedBy: null });
 }
 
 function readJson(filePath) {
@@ -734,6 +736,25 @@ function resolveAlert(id, { resolvedBy, resolvedByName, resolutionType, resoluti
   return alert;
 }
 
+// ---- OT(연장근무) 계산기 근무 일정 ----
+// 행사와 무관하게 하나만 존재하는 공용 문서 — editor.html에서 저장하면
+// 같은 계정으로 다른 PC에서 로그인해도 그대로 보인다.
+function getOtSchedule() {
+  return readJson(OT_SCHEDULE_FILE);
+}
+
+function saveOtSchedule({ rangeStart, rangeEnd, days, updatedBy }) {
+  const data = {
+    rangeStart: rangeStart || null,
+    rangeEnd: rangeEnd || null,
+    days: days && typeof days === 'object' ? days : {},
+    updatedAt: new Date().toISOString(),
+    updatedBy: updatedBy || null,
+  };
+  writeJson(OT_SCHEDULE_FILE, data);
+  return data;
+}
+
 const CONTACT_RETENTION_DAYS = 7;
 
 // 행사일(event.date) 기준 7일이 지나면 부스의 온보딩 연락처만 삭제한다
@@ -819,4 +840,7 @@ module.exports = {
   boothHasOpenAlert,
   createAlert,
   resolveAlert,
+  // ot schedule
+  getOtSchedule,
+  saveOtSchedule,
 };

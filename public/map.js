@@ -20,6 +20,7 @@
     wideZoom: false, // PC에서 확대 중일 때 지도 영역이 화면 가로폭 전체를 쓰는 중인지
     resolvingAlertId: null,
     reportBoothByLabel: new Map(),
+    otSchedule: null, // OT 계산기(editor.html)에서 저장한 근무 일정 — "지금 근무 중" 계산에 쓴다
   };
 
   const el = {
@@ -29,6 +30,7 @@
     eventSelect: document.getElementById('event-select'),
     installStartBtn: document.getElementById('install-start-btn'),
     todayStaffPanel: document.getElementById('today-staff-panel'),
+    onDutyPanel: document.getElementById('on-duty-panel'),
     zoneTabs: document.getElementById('zone-tabs'),
     activeAsBanner: document.getElementById('active-as-banner'),
     activeAsList: document.getElementById('active-as-list'),
@@ -162,6 +164,7 @@
 
     renderZoneTabs();
     renderTodayStaffPanel();
+    renderOnDutyPanel();
     renderCurrentMap();
   }
 
@@ -241,6 +244,7 @@
     closePopover();
     renderZoneTabs();
     renderTodayStaffPanel();
+    renderOnDutyPanel();
     renderCurrentMap();
   }
 
@@ -606,6 +610,121 @@
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function yesterdayStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function parseTimeToMinutes(str) {
+    if (!str) return null;
+    const [h, m] = str.split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return h * 60 + m;
+  }
+
+  // OT 계산기(editor.html)에서 저장한 근무 일정을 보고, "지금" 근무 시간대에 걸쳐 있는
+  // 사람들을 찾는다. 자정을 넘겨 오늘까지 이어지는 어제 시작 근무도 함께 확인한다.
+  function computeOnDutyNow() {
+    const schedule = state.otSchedule;
+    if (!schedule || !schedule.days) return [];
+
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const results = [];
+
+    const checkDay = (dateStr, minuteOffset) => {
+      const day = schedule.days[dateStr];
+      if (!day) return;
+      ['a', 'b'].forEach((teamKey) => {
+        const team = day.teams && day.teams[teamKey];
+        if (!team || team.excluded) return;
+        const checkinMin = parseTimeToMinutes(team.checkin);
+        if (checkinMin == null) return;
+        let checkoutMin;
+        if (team.calteo) {
+          checkoutMin = checkinMin + 9 * 60; // 9시간(식사시간 포함)
+        } else {
+          checkoutMin = parseTimeToMinutes(team.checkout);
+          if (checkoutMin == null) return;
+          if (checkoutMin < checkinMin) checkoutMin += 24 * 60;
+        }
+        const nowRelative = nowMin + minuteOffset;
+        if (nowRelative < checkinMin || nowRelative >= checkoutMin) return;
+        (team.people || []).forEach((p) => {
+          const username = typeof p === 'string' ? p : p.username;
+          const displayName = typeof p === 'string' ? p : p.displayName;
+          if (!username || results.some((r) => r.username === username)) return;
+          results.push({ username, displayName: displayName || username, team: teamKey === 'a' ? '조 A' : '조 B' });
+        });
+      });
+    };
+
+    checkDay(todayStr(), 0);
+    checkDay(yesterdayStr(), 24 * 60);
+    return results;
+  }
+
+  async function assignOnDutyPerson(username) {
+    if (!state.eventId) return;
+    const zone = getActiveZone();
+    try {
+      const { assignment } = await api(`/api/events/${state.eventId}/assignments`, {
+        method: 'POST',
+        body: JSON.stringify({ date: todayStr(), zoneId: zone ? zone.id : null, username }),
+      });
+      state.event.assignments.push(assignment);
+      renderTodayStaffPanel();
+      renderOnDutyPanel();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function renderOnDutyPanel() {
+    if (!el.onDutyPanel) return;
+    if (!state.event) {
+      el.onDutyPanel.hidden = true;
+      return;
+    }
+    const onDuty = computeOnDutyNow();
+    if (!onDuty.length) {
+      el.onDutyPanel.hidden = true;
+      return;
+    }
+    el.onDutyPanel.hidden = false;
+
+    const isAdmin = state.me && state.me.role === 'admin';
+    const zone = getActiveZone();
+    const assignLabel = zone ? `${zone.name}에 배치` : '공통으로 배치';
+
+    const rows = onDuty
+      .map((p) => {
+        const btn = isAdmin
+          ? `<button type="button" class="secondary on-duty-assign-btn" data-username="${escapeHtml(p.username)}">${escapeHtml(assignLabel)}</button>`
+          : '';
+        return `<div class="staff-row"><span>${escapeHtml(p.displayName)} (${p.team})</span>${btn}</div>`;
+      })
+      .join('');
+    el.onDutyPanel.innerHTML = `<div class="on-duty-title">지금 근무 중</div>${rows}`;
+
+    if (isAdmin) {
+      el.onDutyPanel.querySelectorAll('.on-duty-assign-btn').forEach((btn) => {
+        btn.addEventListener('click', () => assignOnDutyPerson(btn.dataset.username));
+      });
+    }
+  }
+
+  async function loadOtSchedule() {
+    try {
+      state.otSchedule = await api('/api/ot-schedule');
+    } catch (err) {
+      state.otSchedule = null;
+    }
+    renderOnDutyPanel();
   }
 
   function staffLine(label, list) {
@@ -998,5 +1117,8 @@
     await loadIssueTypes();
     await loadResolutionTypes();
     await loadEvents();
+    await loadOtSchedule();
+    // "지금 근무 중"은 시각에 따라 바뀌므로 분 단위로 다시 계산해 보여준다(일정 자체는 다시 불러오지 않음).
+    setInterval(renderOnDutyPanel, 60 * 1000);
   })();
 })();

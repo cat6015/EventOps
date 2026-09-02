@@ -64,6 +64,12 @@ router.get('/events', (req, res) => {
   res.json(store.listEventSummaries());
 });
 
+// OT 계산기(editor.html)가 저장한 근무 일정을 읽어온다. 지도 화면(map.html)의 "지금 근무 중" 표시에도
+// 쓰이므로 로그인한 사용자라면 누구나 조회할 수 있게 열어둔다(쓰기는 routes/admin.js에서 관리자만).
+router.get('/ot-schedule', (req, res) => {
+  res.json(store.getOtSchedule());
+});
+
 router.get('/events/:id', (req, res) => {
   const event = store.getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
