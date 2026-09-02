@@ -172,6 +172,7 @@ th { color: #6b7280; font-weight: 600; }
 .badge.active { background: #e6f4ea; color: #1a7f37; }
 .badge.archived { background: #f0f2f5; color: #6b7280; }
 .badge.pending { background: #fef3c7; color: #92400e; }
+.badge.over-limit { background: #fbe4e2; color: #b91c1c; }
 
 /* 모바일에서는 상단바가 세로 폭을 너무 많이 차지하지 않도록 폰트/여백을 줄인다 */
 @media (max-width: 640px) {
@@ -186,24 +187,35 @@ th { color: #6b7280; font-weight: 600; }
 /* OT(연장근무) 계산기 */
 .ot-toolbar { display: flex; justify-content: flex-end; margin-top: 4px; }
 
-/* auto-fit + minmax: 화면이 좁아지면 한 줄에 들어가는 카드 수가 줄어들며 다음 줄로 넘어갈 뿐,
-   가로 스크롤은 생기지 않는다. */
-.ot-day-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 16px 0 20px; }
+/* 요일 하나가 한 행 전체를 차지하고, 그 안에 조 A/B 블록이 나란히(좁으면 아래로 줄바꿈) 배치된다.
+   가로 스크롤 없이 화면 폭에 맞춰 조 블록 수가 자동으로 줄어든다. */
+.ot-day-grid { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 20px; }
 
 .ot-day-card {
   border: 1px solid #e5e7eb;
-  border-top: 3px solid #e5e7eb;
   border-radius: 8px;
-  padding: 12px 10px;
+  padding: 12px 14px;
+}
+.ot-day-card.is-holiday { border-left: 3px solid #d1242f; }
+.ot-day-card .ot-day-name { font-weight: 700; font-size: 0.95rem; }
+.ot-day-card.is-sun .ot-day-name, .ot-day-card.is-holiday .ot-day-name { color: #d1242f; }
+.ot-day-card .ot-day-full { font-size: 0.68rem; color: #6b7280; margin-top: -6px; }
+
+.ot-day-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+
+.ot-team-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.ot-team-block {
+  flex: 1 1 220px;
+  min-width: 200px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.ot-day-card.is-holiday { border-top-color: #d1242f; }
-.ot-day-card.is-excluded { background: #f7f8fa; }
-.ot-day-card .ot-day-name { font-weight: 700; font-size: 0.95rem; }
-.ot-day-card.is-sun .ot-day-name, .ot-day-card.is-holiday .ot-day-name { color: #d1242f; }
-.ot-day-card .ot-day-full { font-size: 0.68rem; color: #6b7280; margin-top: -6px; }
+.ot-team-block.is-excluded { background: #f7f8fa; }
+.ot-team-title { font-weight: 700; font-size: 0.8rem; color: #1f6feb; }
 
 .ot-exclude-toggle, .ot-holiday-toggle, .ot-calteo-toggle {
   display: flex;
@@ -253,9 +265,9 @@ th { color: #6b7280; font-weight: 600; }
 .ot-calteo-toggle input:checked { background: #1a7f37; border-color: #1a7f37; }
 .ot-calteo-toggle .ot-label-on { color: #1a7f37; font-weight: 600; }
 
-.ot-time-row { display: flex; flex-direction: column; gap: 6px; }
+.ot-time-row { display: flex; gap: 6px; }
 .ot-time-row.is-disabled { opacity: 0.4; pointer-events: none; }
-.ot-time-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.66rem; color: #6b7280; }
+.ot-time-field { flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; font-size: 0.66rem; color: #6b7280; }
 .ot-time-field input[type="time"] {
   width: 100%;
   min-width: 0;
@@ -270,6 +282,23 @@ th { color: #6b7280; font-weight: 600; }
 }
 .ot-time-field input[type="time"]:focus-visible { outline: 2px solid #1f6feb; outline-offset: 1px; }
 
+.ot-people-picker { font-size: 0.72rem; color: #374151; }
+.ot-people-summary { cursor: pointer; color: #1f6feb; font-weight: 600; }
+.ot-people-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  background: white;
+}
+.ot-people-list label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #1f2933; cursor: pointer; }
+.ot-people-empty { font-size: 0.7rem; color: #6b7280; }
+
 .ot-day-note { font-size: 0.66rem; color: #6b7280; line-height: 1.4; }
 .ot-day-note:empty { display: none; }
 
@@ -277,24 +306,17 @@ th { color: #6b7280; font-weight: 600; }
 .ot-day-result .ot-val { color: #1f2933; font-weight: 600; }
 .ot-day-result .ot-val.has-ot { color: #1f6feb; }
 
-.ot-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 18px; }
-@media (max-width: 620px) { .ot-stat-row { grid-template-columns: repeat(2, 1fr); } }
+.ot-stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 18px; }
+@media (max-width: 520px) { .ot-stat-row { grid-template-columns: repeat(1, 1fr); } }
 .ot-stat { background: #f7f8fa; border-radius: 8px; padding: 10px 12px; }
 .ot-stat .ot-stat-label { font-size: 0.7rem; color: #6b7280; margin-bottom: 4px; }
 .ot-stat .ot-stat-value { font-size: 1.2rem; font-weight: 700; }
 .ot-stat .ot-stat-value .ot-unit { font-size: 0.68rem; color: #6b7280; font-weight: 500; margin-left: 2px; }
-.ot-stat.status-good .ot-stat-value { color: #1a7f37; }
-.ot-stat.status-bad .ot-stat-value { color: #d1242f; }
 
-.ot-gauge-head { display: flex; justify-content: space-between; font-size: 0.75rem; color: #6b7280; margin-bottom: 6px; }
-.ot-gauge-head .ot-gauge-fig { font-weight: 700; color: #1f2933; }
-.ot-gauge-track { position: relative; height: 10px; border-radius: 999px; background: #eef1f5; overflow: hidden; border: 1px solid #e5e7eb; }
-.ot-gauge-fill { height: 100%; border-radius: 999px; background: #1a7f37; transition: width 0.2s ease, background 0.2s ease; }
-.ot-gauge-fill.status-warn { background: #b45309; }
-.ot-gauge-fill.status-bad { background: #d1242f; }
-.ot-cap-mark { position: absolute; top: -2px; bottom: -2px; right: 0; width: 2px; background: #1f2933; opacity: 0.3; }
-
-.ot-banner { display: none; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 0.82rem; line-height: 1.5; }
+.ot-banner { display: none; align-items: flex-start; gap: 8px; margin-top: 4px; padding: 10px 12px; border-radius: 8px; font-size: 0.82rem; line-height: 1.5; }
 .ot-banner.show { display: flex; }
 .ot-banner .ot-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; background: #d1242f; }
 .ot-banner.status-bad { background: #fdecea; color: #b91c1c; }
+
+.ot-subheading { font-weight: 700; font-size: 0.92rem; margin: 22px 0 6px; }
+tr.ot-person-row-over td { color: #b91c1c; font-weight: 600; }

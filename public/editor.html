@@ -171,9 +171,9 @@
     <div class="box">
       <h2>근무시간 OT 계산기</h2>
       <p class="status-msg" style="margin-top:-6px;">
-        요일별 근무시간과 휴일(빨간날) 여부를 선택하면, 평일은 기본 8시간 초과분을, 휴일은 근무시간 전체를 연장근무(OT)로 자동 계산합니다.
-        평일에 "칼퇴"를 선택하면 출근시간 기준 9시간(식사시간 포함) 근무 후 퇴근 처리되어 OT가 0시간으로 반영됩니다.
-        일~토 합산 OT가 주 12시간을 넘으면 경고가 표시됩니다.
+        요일마다 근무조를 A/B 두 조로 나눠 인원을 배정하고 조별로 출퇴근시간을 입력하면, 평일은 기본 8시간 초과분을, 휴일은 근무시간 전체를 연장근무(OT)로 자동 계산합니다.
+        "칼퇴"를 선택하면 출근시간 기준 9시간(식사시간 포함) 근무로 처리되어 OT가 0시간으로 반영됩니다.
+        OT 한도(주 12시간)는 사람마다 적용되는 법정 한도라 아래 인원별 표에서 사람 단위로 체크됩니다.
       </p>
       <div class="ot-toolbar">
         <button type="button" class="secondary" id="ot-reset-btn">초기화</button>
@@ -181,33 +181,29 @@
       <div class="ot-day-grid" id="ot-day-grid"></div>
       <div class="ot-stat-row">
         <div class="ot-stat">
-          <div class="ot-stat-label">총 근무시간</div>
+          <div class="ot-stat-label">이번 주 총 근무시간</div>
           <div class="ot-stat-value" id="ot-stat-total">0.0<span class="ot-unit">h</span></div>
         </div>
         <div class="ot-stat">
-          <div class="ot-stat-label">기본(정규)시간</div>
+          <div class="ot-stat-label">기본(정규)시간 합계</div>
           <div class="ot-stat-value" id="ot-stat-regular">0.0<span class="ot-unit">h</span></div>
         </div>
         <div class="ot-stat" id="ot-stat-ot-card">
-          <div class="ot-stat-label">OT 시간</div>
+          <div class="ot-stat-label">OT시간 합계</div>
           <div class="ot-stat-value" id="ot-stat-ot">0.0<span class="ot-unit">h</span></div>
         </div>
-        <div class="ot-stat" id="ot-stat-limit-card">
-          <div class="ot-stat-label">한도까지 여유</div>
-          <div class="ot-stat-value" id="ot-stat-limit">12.0<span class="ot-unit">h</span></div>
-        </div>
-      </div>
-      <div class="ot-gauge-head">
-        <span>주간 OT / 12시간 한도</span>
-        <span class="ot-gauge-fig" id="ot-gauge-fig">0.0 / 12.0h</span>
-      </div>
-      <div class="ot-gauge-track">
-        <div class="ot-gauge-fill" id="ot-gauge-fill" style="width:0%"></div>
-        <div class="ot-cap-mark"></div>
       </div>
       <div class="ot-banner" id="ot-banner">
         <span class="ot-dot"></span>
         <span id="ot-banner-text"></span>
+      </div>
+      <div class="ot-subheading">인원별 주간 근무 현황</div>
+      <p class="status-msg" style="margin-top:-6px;">요일별 조에 배정된 인원의 근무시간을 한 주 기준으로 합산합니다. OT가 12시간을 넘는 사람은 빨간색으로 표시됩니다.</p>
+      <div class="scroll-box">
+        <table>
+          <thead><tr><th>이름</th><th>총 근무</th><th>정규</th><th>OT</th><th>상태</th></tr></thead>
+          <tbody id="ot-person-table-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
