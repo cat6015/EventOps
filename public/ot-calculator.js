@@ -225,7 +225,7 @@
     recalc();
   }
 
-  function loadSaved() {
+  function loadLocalSaved() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       return raw ? JSON.parse(raw) : null;
@@ -234,12 +234,38 @@
     }
   }
 
-  function persist(data) {
+  function persistLocal(data) {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
     } catch (e) {
       /* ignore */
     }
+  }
+
+  // 서버(다른 PC에서도 보이는 공용 저장소)에서 읽어온다. 아직 아무도 저장한 적 없으면
+  // rangeStart가 비어 있는데, 그럴 땐 null을 돌려줘서 로컬 저장값/기본값을 대신 쓰게 한다.
+  async function fetchServerSchedule() {
+    try {
+      const res = await fetch('/api/ot-schedule', { headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data && data.rangeStart ? data : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function saveServerSchedule(state) {
+    const res = await fetch('/api/admin/ot-schedule', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || '저장에 실패했습니다.');
+    }
+    return res.json();
   }
 
   function dayCellOf(teamKey, dayKey) {
@@ -260,7 +286,12 @@
           calteo: cell.querySelector('.ot-calteo-check').checked,
           checkin: cell.querySelector('.ot-checkin-time').value,
           checkout: cell.querySelector('.ot-checkout-time').value,
-          people: Array.from(cell.querySelectorAll('.ot-person-check:checked')).map((cb) => cb.value),
+          // 사용자명뿐 아니라 표시 이름도 같이 저장한다 — 지도 화면(일반 사용자)은 계정 목록
+          // API(/api/admin/users, 관리자 전용)에 접근할 수 없어 이름을 따로 알아낼 수 없기 때문.
+          people: Array.from(cell.querySelectorAll('.ot-person-check:checked')).map((cb) => ({
+            username: cb.value,
+            displayName: cb.closest('label').textContent.trim(),
+          })),
         };
       });
       days[d.key] = { holiday: th.querySelector('.ot-holiday-check').checked, teams };
@@ -287,8 +318,10 @@
         if (ts.checkin) cell.querySelector('.ot-checkin-time').value = ts.checkin;
         if (ts.checkout) cell.querySelector('.ot-checkout-time').value = ts.checkout;
         if (Array.isArray(ts.people)) {
+          // 예전 형식(사용자명 문자열 배열)과 새 형식({username, displayName} 배열)을 둘 다 받아준다.
+          const usernames = new Set(ts.people.map((p) => (typeof p === 'string' ? p : p.username)));
           cell.querySelectorAll('.ot-person-check').forEach((cb) => {
-            cb.checked = ts.people.includes(cb.value);
+            cb.checked = usernames.has(cb.value);
           });
         }
       });
@@ -472,7 +505,7 @@
       banner.classList.remove('show');
     }
 
-    persist(readState());
+    persistLocal(readState());
   }
 
   // 선택된 기간(DAYS)에 대해 근무 제외/휴일/칼퇴/출퇴근시간/인원 선택을 모두 기본값으로 되돌린다.
@@ -512,8 +545,8 @@
     recalc();
   }
 
-  // 입력할 때마다 localStorage에 자동 저장되긴 하지만(recalc() 끝에서), 사용자가
-  // "저장됨"을 눈으로 확인할 수 있도록 별도 저장 버튼과 시각 표시를 둔다.
+  // 입력할 때마다 localStorage에는 자동 저장되지만(recalc() 끝에서, 이 브라우저 안전망용),
+  // 다른 PC에서도 보이려면 서버에 저장해야 한다 — 그건 이 버튼을 눌러야 일어나는 명시적 동작이다.
   function formatNow() {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -522,9 +555,19 @@
   const saveBtn = document.getElementById('ot-save-btn');
   const saveStatus = document.getElementById('ot-save-status');
   if (saveBtn) {
-    saveBtn.addEventListener('click', () => {
-      persist(readState());
-      if (saveStatus) saveStatus.textContent = `저장됨 (${formatNow()}) · 이 브라우저에만 저장됩니다`;
+    saveBtn.addEventListener('click', async () => {
+      const state = readState();
+      persistLocal(state);
+      saveBtn.disabled = true;
+      if (saveStatus) saveStatus.textContent = '저장 중...';
+      try {
+        await saveServerSchedule(state);
+        if (saveStatus) saveStatus.textContent = `저장됨 (${formatNow()}) · 다른 PC에서도 확인할 수 있습니다`;
+      } catch (e) {
+        if (saveStatus) saveStatus.textContent = `저장 실패: ${e.message}`;
+      } finally {
+        saveBtn.disabled = false;
+      }
     });
   }
 
@@ -538,14 +581,21 @@
   rangeStartInput.addEventListener('change', applyRange);
   rangeEndInput.addEventListener('change', applyRange);
 
-  const initial = loadSaved() || {};
-  const initRange = buildDays(initial.rangeStart, initial.rangeEnd);
-  DAYS = initRange.days;
-  rangeStartInput.value = initRange.startStr;
-  rangeEndInput.value = initRange.endStr;
-  renderTableBody();
-  applySavedDays(initial.days);
-  grid.addEventListener('change', recalc);
-  recalc();
-  loadRoster(initial.days);
+  // 초기 로딩: 서버에 이미 저장된 일정이 있으면 그걸 우선 쓰고(다른 PC/관리자가 저장한 최신 상태),
+  // 없으면 이 브라우저에 남아있던 임시 입력값을 쓴다.
+  (async function init() {
+    const local = loadLocalSaved() || {};
+    const server = await fetchServerSchedule();
+    const initial = server || local;
+
+    const initRange = buildDays(initial.rangeStart, initial.rangeEnd);
+    DAYS = initRange.days;
+    rangeStartInput.value = initRange.startStr;
+    rangeEndInput.value = initRange.endStr;
+    renderTableBody();
+    applySavedDays(initial.days);
+    grid.addEventListener('change', recalc);
+    recalc();
+    loadRoster(initial.days);
+  })();
 })();

@@ -127,4 +127,20 @@ router.post('/admin/users/import', (req, res) => {
   }
 });
 
+// OT 계산기에서 저장하는 근무 일정. 읽기는 GET /api/ot-schedule(로그인만 필요, routes/events.js)로
+// 하고, 쓰기만 관리자로 제한한다.
+router.put('/admin/ot-schedule', (req, res) => {
+  const { rangeStart, rangeEnd, days } = req.body || {};
+  if (days && typeof days !== 'object') {
+    return res.status(400).json({ error: 'days 형식이 올바르지 않습니다.' });
+  }
+  const saved = store.saveOtSchedule({
+    rangeStart,
+    rangeEnd,
+    days,
+    updatedBy: req.session.user.displayName,
+  });
+  res.json(saved);
+});
+
 module.exports = router;
