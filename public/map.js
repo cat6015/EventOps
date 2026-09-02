@@ -21,6 +21,7 @@
     resolvingAlertId: null,
     reportBoothByLabel: new Map(),
     otSchedule: null, // OT 계산기(editor.html)에서 저장한 근무 일정 — "지금 근무 중" 계산에 쓴다
+    selectedDate: null, // 담당자/근무 현황을 조회할 날짜(YYYY-MM-DD). 기본값은 오늘.
   };
 
   const el = {
@@ -29,6 +30,7 @@
     navUsers: document.getElementById('nav-users'),
     eventSelect: document.getElementById('event-select'),
     installStartBtn: document.getElementById('install-start-btn'),
+    staffDatePicker: document.getElementById('staff-date-picker'),
     todayStaffPanel: document.getElementById('today-staff-panel'),
     onDutyPanel: document.getElementById('on-duty-panel'),
     zoneTabs: document.getElementById('zone-tabs'),
@@ -626,8 +628,20 @@
     return h * 60 + m;
   }
 
+  function selectedDateStr() {
+    return state.selectedDate || todayStr();
+  }
+
+  function formatDateLabel(dateStr) {
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const weekday = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+    return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+  }
+
   // OT 계산기(editor.html)에서 저장한 근무 일정을 보고, "지금" 근무 시간대에 걸쳐 있는
   // 사람들을 찾는다. 자정을 넘겨 오늘까지 이어지는 어제 시작 근무도 함께 확인한다.
+  // (조회 날짜가 오늘일 때만 의미가 있다 — 다른 날짜는 computeScheduledPeople을 쓴다.)
   function computeOnDutyNow() {
     const schedule = state.otSchedule;
     if (!schedule || !schedule.days) return [];
@@ -668,13 +682,33 @@
     return results;
   }
 
+  // 오늘이 아닌 다른 날짜를 조회할 때 쓴다 — "지금 시각"이 그 날짜엔 의미가 없으니
+  // 시간대와 상관없이 그날 근무 제외되지 않은 사람 전체를 보여준다.
+  function computeScheduledPeople(dateStr) {
+    const schedule = state.otSchedule;
+    const day = schedule && schedule.days && schedule.days[dateStr];
+    if (!day) return [];
+    const results = [];
+    ['a', 'b'].forEach((teamKey) => {
+      const team = day.teams && day.teams[teamKey];
+      if (!team || team.excluded) return;
+      (team.people || []).forEach((p) => {
+        const username = typeof p === 'string' ? p : p.username;
+        const displayName = typeof p === 'string' ? p : p.displayName;
+        if (!username || results.some((r) => r.username === username)) return;
+        results.push({ username, displayName: displayName || username, team: teamKey === 'a' ? '조 A' : '조 B' });
+      });
+    });
+    return results;
+  }
+
   async function assignOnDutyPerson(username) {
     if (!state.eventId) return;
     const zone = getActiveZone();
     try {
       const { assignment } = await api(`/api/events/${state.eventId}/assignments`, {
         method: 'POST',
-        body: JSON.stringify({ date: todayStr(), zoneId: zone ? zone.id : null, username }),
+        body: JSON.stringify({ date: selectedDateStr(), zoneId: zone ? zone.id : null, username }),
       });
       state.event.assignments.push(assignment);
       renderTodayStaffPanel();
@@ -690,8 +724,13 @@
       el.onDutyPanel.hidden = true;
       return;
     }
-    const onDuty = computeOnDutyNow();
-    if (!onDuty.length) {
+
+    const dateStr = selectedDateStr();
+    const isToday = dateStr === todayStr();
+    // "지금 근무 중"은 현재 시각과 비교하는 개념이라 오늘 조회할 때만 의미가 있다.
+    // 다른 날짜를 보고 있으면 시간대 상관없이 그날 배정된 사람 전체를 보여준다.
+    const people = isToday ? computeOnDutyNow() : computeScheduledPeople(dateStr);
+    if (!people.length) {
       el.onDutyPanel.hidden = true;
       return;
     }
@@ -700,8 +739,9 @@
     const isAdmin = state.me && state.me.role === 'admin';
     const zone = getActiveZone();
     const assignLabel = zone ? `${zone.name}에 배치` : '공통으로 배치';
+    const title = isToday ? '지금 근무 중' : `${formatDateLabel(dateStr)} 근무 예정 인원`;
 
-    const rows = onDuty
+    const rows = people
       .map((p) => {
         const btn = isAdmin
           ? `<button type="button" class="secondary on-duty-assign-btn" data-username="${escapeHtml(p.username)}">${escapeHtml(assignLabel)}</button>`
@@ -709,7 +749,7 @@
         return `<div class="staff-row"><span>${escapeHtml(p.displayName)} (${p.team})</span>${btn}</div>`;
       })
       .join('');
-    el.onDutyPanel.innerHTML = `<div class="on-duty-title">지금 근무 중</div>${rows}`;
+    el.onDutyPanel.innerHTML = `<div class="on-duty-title">${escapeHtml(title)}</div>${rows}`;
 
     if (isAdmin) {
       el.onDutyPanel.querySelectorAll('.on-duty-assign-btn').forEach((btn) => {
@@ -745,19 +785,20 @@
       return;
     }
     el.todayStaffPanel.hidden = false;
-    const today = todayStr();
-    const todays = (state.event.assignments || []).filter((a) => a.date === today);
+    const dateStr = selectedDateStr();
+    const dayLabel = dateStr === todayStr() ? `오늘(${formatDateLabel(dateStr)})` : formatDateLabel(dateStr);
+    const todays = (state.event.assignments || []).filter((a) => a.date === dateStr);
     const zone = getActiveZone();
 
     if (zone) {
       let list = todays.filter((x) => x.zoneId === zone.id);
       if (!list.length) list = todays.filter((x) => !x.zoneId);
-      el.todayStaffPanel.innerHTML = staffLine(`오늘(${today}) ${zone.name} 담당자`, list);
+      el.todayStaffPanel.innerHTML = staffLine(`${dayLabel} ${zone.name} 담당자`, list);
       return;
     }
 
     const generalList = todays.filter((x) => !x.zoneId);
-    const lines = [staffLine(`오늘(${today}) 담당자`, generalList)];
+    const lines = [staffLine(`${dayLabel} 담당자`, generalList)];
     for (const z of state.event.zones || []) {
       const list = todays.filter((x) => x.zoneId === z.id);
       if (list.length) lines.push(staffLine(z.name, list));
@@ -1112,6 +1153,16 @@
     return new Date(iso).toLocaleString('ko-KR');
   }
 
+  if (el.staffDatePicker) {
+    el.staffDatePicker.value = todayStr();
+    state.selectedDate = todayStr();
+    el.staffDatePicker.addEventListener('change', () => {
+      state.selectedDate = el.staffDatePicker.value || todayStr();
+      renderTodayStaffPanel();
+      renderOnDutyPanel();
+    });
+  }
+
   (async function init() {
     await loadMe();
     await loadIssueTypes();
@@ -1119,6 +1170,8 @@
     await loadEvents();
     await loadOtSchedule();
     // "지금 근무 중"은 시각에 따라 바뀌므로 분 단위로 다시 계산해 보여준다(일정 자체는 다시 불러오지 않음).
+    // 다른 날짜를 보고 있을 땐 그대로 둬도 매분 다시 그릴 필요는 없지만, renderOnDutyPanel이
+    // 알아서 오늘인지 아닌지 구분하므로 그냥 항상 돌려도 무해하다.
     setInterval(renderOnDutyPanel, 60 * 1000);
   })();
 })();
