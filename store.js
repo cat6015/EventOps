@@ -185,6 +185,7 @@ function withDefaults(event) {
   if (event.isDefault === undefined) event.isDefault = false;
   if (!Array.isArray(event.zones)) event.zones = [];
   if (!Array.isArray(event.assignments)) event.assignments = [];
+  if (!Array.isArray(event.onboardingLogs)) event.onboardingLogs = [];
   for (const b of event.booths) {
     if (b.zoneId === undefined) b.zoneId = null;
     if (b.zoneXPct === undefined) b.zoneXPct = null;
@@ -219,6 +220,7 @@ function createEvent({ id, name, date, createdBy }) {
     zones: [],
     booths: [],
     assignments: [],
+    onboardingLogs: [],
     createdAt: now,
     createdBy,
     updatedAt: now,
@@ -685,6 +687,29 @@ function removeAssignment(eventId, assignmentId) {
   return removed;
 }
 
+// ---- 온보딩완료 로그 ----
+// "온보딩완료"로 바뀔 때마다 누가/언제/어느 부스인지 기록한다(설치 상태 자체와는 별개 이력).
+function addOnboardingLog(eventId, { boothId, boothNumber, zoneId, storeName, businessNumber, corpNumber, van, completedBy, completedByName }) {
+  const event = getEvent(eventId);
+  if (!event) return null;
+  const log = {
+    id: crypto.randomUUID(),
+    boothId,
+    boothNumber: boothNumber || null,
+    zoneId: zoneId || null,
+    storeName: storeName || null,
+    businessNumber: businessNumber || null,
+    corpNumber: corpNumber || null,
+    van: van || null,
+    completedBy,
+    completedByName: completedByName || completedBy,
+    completedAt: new Date().toISOString(),
+  };
+  event.onboardingLogs.unshift(log); // 최신이 앞에 오도록
+  saveEvent(event);
+  return log;
+}
+
 // ---- alerts ----
 function getAlerts() {
   return readJson(ALERTS_FILE);
@@ -831,6 +856,7 @@ module.exports = {
   // assignments
   addAssignment,
   removeAssignment,
+  addOnboardingLog,
   // alerts
   getAlerts,
   getAlertsForEvent,

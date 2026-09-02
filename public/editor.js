@@ -123,6 +123,10 @@
     assignCreateBtn: document.getElementById('assign-create-btn'),
     assignStatus: document.getElementById('assign-status'),
     assignmentListBody: document.getElementById('assignment-list-body'),
+    onboardingLogBox: document.getElementById('onboarding-log-box'),
+    onboardingLogSearch: document.getElementById('onboarding-log-search'),
+    onboardingLogRefreshBtn: document.getElementById('onboarding-log-refresh-btn'),
+    onboardingLogBody: document.getElementById('onboarding-log-body'),
   };
 
   async function api(path, options) {
@@ -186,12 +190,14 @@
     el.importBox.hidden = false;
     el.boothListBox.hidden = false;
     el.assignmentBox.hidden = false;
+    el.onboardingLogBox.hidden = false;
     applyZoom();
     setMode('select');
     renderMap();
     renderBoothList();
     renderAssignZoneOptions();
     renderAssignmentList();
+    renderOnboardingLog();
   }
 
   function getActiveZone() {
@@ -1408,6 +1414,59 @@
       });
     });
   }
+
+  function formatDateTime(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('ko-KR');
+  }
+
+  function renderOnboardingLog() {
+    const logs = state.event.onboardingLogs || [];
+    const query = el.onboardingLogSearch.value.trim().toLowerCase();
+    const filtered = query
+      ? logs.filter((log) =>
+          [log.boothNumber, log.storeName, log.businessNumber, log.corpNumber]
+            .some((v) => (v || '').toLowerCase().includes(query))
+        )
+      : logs;
+
+    if (filtered.length === 0) {
+      el.onboardingLogBody.innerHTML = `<tr><td colspan="10" style="color:#6b7280;">${
+        query ? '검색 결과가 없습니다.' : '온보딩완료 처리 이력이 없습니다.'
+      }</td></tr>`;
+      return;
+    }
+
+    el.onboardingLogBody.innerHTML = filtered
+      .map((log, idx) => {
+        const zone = log.zoneId ? state.event.zones.find((z) => z.id === log.zoneId) : null;
+        const zoneLabel = log.zoneId ? (zone ? escapeHtml(zone.name) : '(삭제된 구역)') : '전체';
+        return `<tr>
+          <td>${filtered.length - idx}</td>
+          <td>${escapeHtml(formatDateTime(log.completedAt))}</td>
+          <td>${escapeHtml(log.boothNumber || '')}</td>
+          <td>${zoneLabel}</td>
+          <td>${escapeHtml(log.storeName || '')}</td>
+          <td>${escapeHtml(log.businessNumber || '')}</td>
+          <td>${escapeHtml(log.corpNumber || '')}</td>
+          <td>${escapeHtml(log.van || '')}</td>
+          <td>${escapeHtml(log.completedByName)}</td>
+          <td>${escapeHtml(log.completedBy)}</td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  el.onboardingLogSearch.addEventListener('input', renderOnboardingLog);
+  el.onboardingLogRefreshBtn.addEventListener('click', async () => {
+    if (!state.event) return;
+    try {
+      state.event = await api(`/api/events/${state.event.id}`);
+      renderOnboardingLog();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
 
   el.assignCreateBtn.addEventListener('click', async () => {
     el.assignStatus.textContent = '';
