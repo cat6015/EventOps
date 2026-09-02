@@ -57,8 +57,22 @@
 .booth-marker.selected rect.box { stroke: #f59e0b; }
 
 /* 설치/온보딩 진행 상태(뒤에 나오는 A/S 발생 표시가 항상 우선하도록 이 규칙들을 먼저 둔다) */
-.booth-marker.marker--onboarding rect.box { fill: #f59e0b; }
+/* "설치시작"으로 온보딩 필요 상태가 된 부스는 온보딩완료 전까지 반짝여서 눈에 잘 띄게 한다. */
+.booth-marker.marker--onboarding rect.box {
+  fill: #f59e0b;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: booth-onboarding-sparkle 1.4s ease-in-out infinite;
+}
 .booth-marker.marker--installed rect.box { fill: #1a7f37; }
+
+@keyframes booth-onboarding-sparkle {
+  0%, 100% { fill: #f59e0b; transform: scale(1); }
+  50% { fill: #fde68a; transform: scale(1.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .booth-marker.marker--onboarding rect.box { animation: none; }
+}
 
 .booth-marker.marker--alert rect.box {
   fill: #dc2626;
