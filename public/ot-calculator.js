@@ -128,6 +128,7 @@
     return `
       <div class="ot-day-header-name${d.isSun ? ' is-sun' : ''}">${d.short}</div>
       <div class="ot-day-header-full">${d.weekday}요일</div>
+      <input type="text" class="ot-day-memo" placeholder="메모(행사/업무)" />
       <label class="ot-holiday-toggle">
         <input type="checkbox" class="ot-holiday-check" ${d.defaultHoliday ? 'checked' : ''} />
         <span class="ot-label-text">휴일</span>
@@ -146,6 +147,7 @@
         <input type="checkbox" class="ot-calteo-check" />
         <span class="ot-label-text">칼퇴</span>
       </label>
+      <input type="text" class="ot-team-memo" placeholder="업무 메모" />
       <div class="ot-time-row">
         <label class="ot-time-field">
           <span class="ot-time-caption">출근</span>
@@ -284,6 +286,7 @@
         teams[t.key] = {
           excluded: excludeCheck ? excludeCheck.checked : false,
           calteo: cell.querySelector('.ot-calteo-check').checked,
+          memo: cell.querySelector('.ot-team-memo').value,
           checkin: cell.querySelector('.ot-checkin-time').value,
           checkout: cell.querySelector('.ot-checkout-time').value,
           // 사용자명뿐 아니라 표시 이름도 같이 저장한다 — 지도 화면(일반 사용자)은 계정 목록
@@ -294,13 +297,17 @@
           })),
         };
       });
-      days[d.key] = { holiday: th.querySelector('.ot-holiday-check').checked, teams };
+      days[d.key] = {
+        holiday: th.querySelector('.ot-holiday-check').checked,
+        memo: th.querySelector('.ot-day-memo').value,
+        teams,
+      };
     });
     return { rangeStart: rangeStartInput.value, rangeEnd: rangeEndInput.value, days };
   }
 
   // 날짜별 저장값(savedDays)을 지금 화면에 그려진 DAYS에 맞춰 되돌린다.
-  // savedDays는 { 'YYYY-MM-DD': { holiday, teams } } 형태 — 현재 표시된 기간 밖의 날짜는 무시된다.
+  // savedDays는 { 'YYYY-MM-DD': { holiday, memo, teams } } 형태 — 현재 표시된 기간 밖의 날짜는 무시된다.
   function applySavedDays(savedDays) {
     if (!savedDays) return;
     DAYS.forEach((d) => {
@@ -308,6 +315,7 @@
       if (!s) return;
       const th = table.querySelector(`th[data-day="${d.key}"]`);
       th.querySelector('.ot-holiday-check').checked = !!s.holiday;
+      if (s.memo) th.querySelector('.ot-day-memo').value = s.memo;
       TEAMS.forEach((t) => {
         const ts = s.teams && s.teams[t.key];
         if (!ts) return;
@@ -315,6 +323,7 @@
         const excludeCheck = cell.querySelector('.ot-exclude-check');
         if (excludeCheck) excludeCheck.checked = !!ts.excluded;
         cell.querySelector('.ot-calteo-check').checked = !!ts.calteo;
+        if (ts.memo) cell.querySelector('.ot-team-memo').value = ts.memo;
         if (ts.checkin) cell.querySelector('.ot-checkin-time').value = ts.checkin;
         if (ts.checkout) cell.querySelector('.ot-checkout-time').value = ts.checkout;
         if (Array.isArray(ts.people)) {
