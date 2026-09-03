@@ -149,6 +149,7 @@
 
   <div class="box" id="assignment-box" style="margin-top:24px;" hidden>
     <h2>날짜별 담당자 배정</h2>
+    <p class="status-msg" style="margin-top:-6px;">날짜를 고르면 근무시간 탭(OT 계산기)에 그날 근무자로 등록된 인원만 담당자 목록에 나타납니다. 등록된 근무자가 없는 날짜는 전체 계정에서 고를 수 있습니다.</p>
     <div class="inline-form">
       <input type="date" id="assign-date" />
       <select id="assign-zone-select"><option value="">전체(공통)</option></select>
@@ -157,6 +158,7 @@
       <input type="text" id="assign-note" placeholder="메모(선택)" />
       <button id="assign-create-btn">배정</button>
     </div>
+    <p class="status-msg" id="assign-user-hint"></p>
     <p class="status-msg" id="assign-status"></p>
     <div class="scroll-box">
       <table class="booth-list-table">

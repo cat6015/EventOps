@@ -20,6 +20,7 @@
     modalBoothId: null,
     selected: new Set(),
     zoom: 1,
+    otSchedule: null, // OT 계산기(같은 페이지 근무시간 탭)에서 저장한 근무 일정 — 날짜별 담당자 배정에서 그날 근무자 목록을 채우는 데 쓴다
   };
 
   const el = {
@@ -118,6 +119,7 @@
     assignDate: document.getElementById('assign-date'),
     assignZoneSelect: document.getElementById('assign-zone-select'),
     assignUserSelect: document.getElementById('assign-user-select'),
+    assignUserHint: document.getElementById('assign-user-hint'),
     assignPhone: document.getElementById('assign-phone'),
     assignNote: document.getElementById('assign-note'),
     assignCreateBtn: document.getElementById('assign-create-btn'),
@@ -148,13 +150,64 @@
   async function loadUsers() {
     try {
       state.users = await api('/api/admin/users');
-      el.assignUserSelect.innerHTML = state.users
-        .map((u) => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.displayName)} (${escapeHtml(u.username)})</option>`)
-        .join('');
+      renderAssignUserOptions();
     } catch (err) {
       // 계정 목록을 못 불러와도 나머지 기능은 계속 쓸 수 있게 무시
     }
   }
+
+  // 근무시간 탭(OT 계산기)이 저장한 일정을 읽어와, 날짜별 담당자 배정에서
+  // 그날 근무자로 등록된 인원만 골라 보여줄 수 있게 한다.
+  async function loadOtSchedule() {
+    try {
+      state.otSchedule = await api('/api/ot-schedule');
+    } catch (err) {
+      state.otSchedule = null;
+    }
+    renderAssignUserOptions();
+  }
+
+  function getScheduledPeopleForDate(dateStr) {
+    const schedule = state.otSchedule;
+    const day = schedule && schedule.days && schedule.days[dateStr];
+    if (!day) return [];
+    const results = [];
+    ['a', 'b'].forEach((teamKey) => {
+      const team = day.teams && day.teams[teamKey];
+      if (!team || team.excluded) return;
+      (team.people || []).forEach((p) => {
+        const username = typeof p === 'string' ? p : p.username;
+        const displayName = typeof p === 'string' ? p : p.displayName;
+        if (!username || results.some((r) => r.username === username)) return;
+        results.push({ username, displayName: displayName || username, team: teamKey === 'a' ? '조A' : '조B' });
+      });
+    });
+    return results;
+  }
+
+  // 선택한 날짜에 근무시간 탭에 등록된 근무자가 있으면 그 사람들만, 없으면(또는 날짜 미선택)
+  // 전체 계정 목록을 담당자 선택란에 채운다.
+  function renderAssignUserOptions() {
+    const dateStr = el.assignDate.value;
+    const scheduled = dateStr ? getScheduledPeopleForDate(dateStr) : [];
+
+    if (scheduled.length > 0) {
+      el.assignUserSelect.innerHTML = scheduled
+        .map((p) => `<option value="${escapeHtml(p.username)}">${escapeHtml(p.displayName)} (${p.team})</option>`)
+        .join('');
+      el.assignUserHint.textContent = `${dateStr}에 근무시간 탭에 등록된 근무자 ${scheduled.length}명입니다.`;
+      return;
+    }
+
+    el.assignUserSelect.innerHTML = state.users
+      .map((u) => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.displayName)} (${escapeHtml(u.username)})</option>`)
+      .join('');
+    el.assignUserHint.textContent = dateStr
+      ? `${dateStr}에 근무시간 탭에 등록된 근무자가 없어 전체 계정 목록을 보여줍니다.`
+      : '';
+  }
+
+  el.assignDate.addEventListener('change', renderAssignUserOptions);
 
   function renderEventOptions() {
     el.eventSelect.innerHTML = state.events
@@ -1654,6 +1707,7 @@
     applyZoom();
     await loadMe();
     await loadUsers();
+    await loadOtSchedule();
     await loadEvents();
   })();
 })();
