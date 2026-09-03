@@ -206,9 +206,24 @@ th { color: #6b7280; font-weight: 600; }
 .ot-day-header-name { font-weight: 700; font-size: 0.9rem; }
 .ot-day-header-name.is-sun, th.is-holiday .ot-day-header-name { color: #d1242f; }
 .ot-day-header-full { font-size: 0.64rem; color: #6b7280; }
+.ot-day-header .ot-day-memo { width: 100%; text-align: center; }
 .ot-day-cell { min-width: 110px; }
 .ot-day-cell.is-excluded { background: #f7f8fa; }
 .ot-day-cell > * + * { margin-top: 8px; }
+
+.ot-day-memo, .ot-team-memo {
+  width: 100%;
+  min-width: 0;
+  font-size: 0.72rem;
+  font-family: inherit;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fffdf5;
+  color: #1f2933;
+}
+.ot-day-memo::placeholder, .ot-team-memo::placeholder { color: #9ca3af; }
+.ot-day-memo:focus-visible, .ot-team-memo:focus-visible { outline: 2px solid #1f6feb; outline-offset: 1px; }
 
 .ot-exclude-toggle, .ot-holiday-toggle, .ot-calteo-toggle {
   display: flex;
