@@ -73,6 +73,23 @@
     return `${y}-${m}-${day}`;
   }
 
+  // OT는 일요일마다 새로 시작하는 일~토 주간 단위로 계산된다. 어느 날짜든 그 주 일요일 날짜를
+  // 키로 돌려주면, 선택 기간이 여러 주에 걸쳐도 사람별 OT를 주 단위로 따로 합산할 수 있다.
+  function weekStartKey(dateKey) {
+    const d = toDateObj(dateKey);
+    if (!d) return dateKey;
+    d.setDate(d.getDate() - d.getDay());
+    return toDateStr(d);
+  }
+
+  function weekRangeLabel(weekKey) {
+    const start = toDateObj(weekKey);
+    if (!start) return weekKey;
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return `${start.getMonth() + 1}/${start.getDate()} ~ ${end.getMonth() + 1}/${end.getDate()}`;
+  }
+
   // 저장된 기간이 없을 때: 오늘이 속한 일~토 한 주를 기본값으로 보여준다.
   function defaultRange() {
     const today = new Date();
@@ -386,7 +403,7 @@
     let totalWorked = 0;
     let totalRegular = 0;
     let totalOt = 0;
-    const personTotals = new Map(); // username -> { displayName, worked, regular, ot, entries: [] }
+    const personTotals = new Map(); // "username__weekStartKey" -> { username, displayName, weekKey, worked, regular, ot, entries: [] }
 
     DAYS.forEach((d) => {
       const th = table.querySelector(`th[data-day="${d.key}"]`);
@@ -453,10 +470,13 @@
         totalOt += ot;
 
         if (!isExcluded) {
+          const weekKey = weekStartKey(d.key);
           cell.querySelectorAll('.ot-person-check:checked').forEach((cb) => {
             const username = cb.value;
             const displayName = cb.closest('label').textContent.trim();
-            const entry = personTotals.get(username) || { displayName, worked: 0, regular: 0, ot: 0, entries: [] };
+            const personKey = `${username}__${weekKey}`;
+            const entry =
+              personTotals.get(personKey) || { username, displayName, weekKey, worked: 0, regular: 0, ot: 0, entries: [] };
             entry.worked += worked;
             entry.regular += regular;
             entry.ot += ot;
@@ -468,7 +488,7 @@
               isHoliday,
               isCalteo,
             });
-            personTotals.set(username, entry);
+            personTotals.set(personKey, entry);
           });
         }
       });
@@ -479,19 +499,28 @@
     document.getElementById('ot-stat-ot').innerHTML = fmt(totalOt) + '<span class="ot-unit">h</span>';
 
     const tbody = document.getElementById('ot-person-table-body');
-    const rows = Array.from(personTotals.entries()).sort((a, b) => a[1].displayName.localeCompare(b[1].displayName, 'ko'));
+    // 주(일요일 시작) 먼저, 그다음 이름 순으로 — 같은 주 안에서 한눈에 비교할 수 있게.
+    const rows = Array.from(personTotals.values()).sort((a, b) => {
+      if (a.weekKey !== b.weekKey) return a.weekKey < b.weekKey ? -1 : 1;
+      return a.displayName.localeCompare(b.displayName, 'ko');
+    });
     let overCount = 0;
+    const overUsernames = new Set();
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="status-msg">조에 배정된 인원이 없습니다.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="status-msg">조에 배정된 인원이 없습니다.</td></tr>';
     } else {
       tbody.innerHTML = rows
-        .map(([username, p]) => {
+        .map((p) => {
           const isOver = p.ot > WEEKLY_OT_CAP;
-          if (isOver) overCount += 1;
+          if (isOver) {
+            overCount += 1;
+            overUsernames.add(p.username);
+          }
           const entriesHtml = p.entries.map((e) => `<div>${escapeHtml(entryLabel(e))}</div>`).join('');
           return `
             <tr class="${isOver ? 'ot-person-row-over' : ''}">
               <td>${escapeHtml(p.displayName)}</td>
+              <td>${escapeHtml(weekRangeLabel(p.weekKey))}</td>
               <td>${fmt(p.worked)}h</td>
               <td>${fmt(p.regular)}h</td>
               <td>${fmt(p.ot)}h</td>
@@ -507,8 +536,8 @@
     const bannerText = document.getElementById('ot-banner-text');
     banner.classList.remove('status-bad');
     if (overCount > 0) {
+      bannerText.innerHTML = `<b>${overUsernames.size}명</b>이 특정 주(일~토)에 12시간 OT 한도를 초과했습니다(${overCount}건). 근로기준법상 연장근무는 주 12시간을 넘길 수 없으니 배정을 조정하세요.`;
       banner.classList.add('show', 'status-bad');
-      bannerText.innerHTML = `<b>${overCount}명</b>이 선택 기간 동안 주 12시간 OT 한도를 초과했습니다. 근로기준법상 연장근무는 주 12시간을 넘길 수 없으니 배정을 조정하세요.`;
     } else {
       banner.classList.remove('show');
     }
