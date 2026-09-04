@@ -89,6 +89,7 @@ button.danger:hover { background: #b91c1c; }
 }
 
 #report-booth-search { min-width: 260px; }
+#booth-locate-search { min-width: 280px; flex: 1 1 280px; }
 
 .stacked-form { display: flex; flex-direction: column; gap: 12px; max-width: 360px; }
 .stacked-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: #374151; }

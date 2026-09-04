@@ -83,6 +83,7 @@
     importUploadBtn: document.getElementById('import-upload-btn'),
     importStatus: document.getElementById('import-status'),
     boothListBox: document.getElementById('booth-list-box'),
+    boothCountSummary: document.getElementById('booth-count-summary'),
     boothListBody: document.getElementById('booth-list-body'),
     boothModal: document.getElementById('booth-modal'),
     boothModalTitle: document.getElementById('booth-modal-title'),
@@ -544,6 +545,8 @@
       return z ? z.name : '(삭제된 구역)';
     };
     const booths = state.event.booths.slice().sort((a, b) => a.number.localeCompare(b.number, 'ko', { numeric: true }));
+    const installedCount = booths.filter((b) => b.installStatus === 'installed').length;
+    el.boothCountSummary.textContent = booths.length > 0 ? `(총 ${booths.length}개 · 온보딩완료 ${installedCount}개)` : '';
     if (booths.length === 0) {
       el.boothListBody.innerHTML = '<tr><td colspan="5" style="color:#6b7280;">등록된 부스가 없습니다.</td></tr>';
       return;
