@@ -49,6 +49,8 @@
     zoomLevel: document.getElementById('zoom-level'),
     reportBoothSearch: document.getElementById('report-booth-search'),
     reportBoothDatalist: document.getElementById('report-booth-datalist'),
+    boothLocateSearch: document.getElementById('booth-locate-search'),
+    boothLocateDatalist: document.getElementById('booth-locate-datalist'),
     reportIssueSelect: document.getElementById('report-issue-select'),
     reportNote: document.getElementById('report-note'),
     reportSubmit: document.getElementById('report-submit'),
@@ -192,13 +194,16 @@
       .slice()
       .sort((a, b) => a.number.localeCompare(b.number, 'ko', { numeric: true }));
     state.reportBoothByLabel = new Map();
-    el.reportBoothDatalist.innerHTML = booths
+    const optionsHtml = booths
       .map((b) => {
         const label = boothSearchLabel(b);
         state.reportBoothByLabel.set(label, b.id);
         return `<option value="${escapeHtml(label)}"></option>`;
       })
       .join('');
+    el.reportBoothDatalist.innerHTML = optionsHtml;
+    // 배치도 위 검색창(위치 찾기)도 같은 부스 목록/라벨을 그대로 재사용한다.
+    el.boothLocateDatalist.innerHTML = optionsHtml;
   }
 
   function getActiveZone() {
@@ -450,21 +455,39 @@
   }
 
   // 부스 위치로 화면을 이동 + 확대한다. 구역에 속한 부스라도 상세구역 지도가 아니라
-  // 항상 전체 배치도 화면에서 그 위치를 보여준다.
+  // 항상 전체 배치도 화면에서 그 위치를 보여주고, 도착하면 마커를 잠깐 반짝여 눈에 띄게 한다.
   function locateBooth(boothId) {
     if (!state.event) return;
     const booth = state.event.booths.find((b) => b.id === boothId);
     if (!booth || booth.xPct == null) return;
     closePopover();
-    if (state.activeZoneId !== null) {
+    // "온보딩미진행" 필터가 켜져 있으면 찾는 부스가 화면에 없을 수 있으니 꺼서 전체를 보여준다.
+    if (state.activeZoneId !== null || state.onboardingFilterOn) {
       switchZoneTab(null);
     }
     afterMapReady(() => {
       const vb = state.viewBooths.find((b) => b.id === boothId);
       if (!vb || vb.xPct == null || vb.yPct == null) return;
       scrollToPct(vb.xPct, vb.yPct, LOCATE_ZOOM);
+      const markerEl = state.markers.get(boothId);
+      if (markerEl) {
+        markerEl.classList.remove('marker--located');
+        // 리플로우를 강제해 같은 부스를 연달아 찾아도 애니메이션이 다시 처음부터 재생되게 한다.
+        void markerEl.offsetWidth;
+        markerEl.classList.add('marker--located');
+        setTimeout(() => markerEl.classList.remove('marker--located'), 1900);
+      }
     });
   }
+
+  // 배치도 위 검색창: 매장명/부스번호/사업자번호로 검색해 목록에서 고르면 그 위치로 바로 이동한다.
+  el.boothLocateSearch.addEventListener('change', () => {
+    const boothId = state.reportBoothByLabel.get(el.boothLocateSearch.value.trim());
+    if (!boothId) return;
+    locateBooth(boothId);
+    el.boothLocateSearch.value = '';
+    el.boothLocateSearch.blur();
+  });
 
   // 구역 상세 배치도가 아직 없을 때, 전체 배치도에서 그 구역이 차지하는 영역만 잘라
   // 화면에 꽉 차게 확대해 보여준다. SVG 오버레이 viewBox는 그대로 0~100이라 부스 좌표
