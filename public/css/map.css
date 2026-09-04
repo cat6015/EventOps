@@ -56,18 +56,19 @@
 
 .booth-marker.selected rect.box { stroke: #f59e0b; }
 
-/* 검색으로 위치를 찾아간 부스를 잠깐 반짝여서 화면에서 바로 눈에 띄게 한다(몇 초 뒤 JS가 클래스를 뗀다).
+/* 검색으로 위치를 찾아간 부스를 계속 반짝여서 눈에 띄게 한다 — 지도 밖을 클릭하거나
+   부스를 클릭하기 전까지 JS가 클래스를 떼지 않는 한 계속 반복된다(infinite).
    온보딩/A/S 표시가 이미 있으면(뒤에 나오는 규칙이라) 그 표시가 계속 우선한다 — 이건 그냥 위치 확인용. */
 .booth-marker.marker--located rect.box {
   transform-origin: center;
   transform-box: fill-box;
-  animation: booth-located-flash 0.6s ease-in-out 3;
+  animation: booth-located-flash 0.6s ease-in-out infinite;
 }
 .booth-marker.marker--located rect.ring {
   fill: none;
   stroke: #1f6feb;
   opacity: 0.9;
-  animation: booth-located-ring 0.6s ease-out 3;
+  animation: booth-located-ring 0.6s ease-out infinite;
 }
 @keyframes booth-located-flash {
   0%, 100% { transform: scale(1); filter: brightness(1); }
