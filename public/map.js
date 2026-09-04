@@ -23,6 +23,7 @@
     otSchedule: null, // OT 계산기(editor.html)에서 저장한 근무 일정 — "지금 근무 중" 계산에 쓴다
     selectedDate: null, // 담당자/근무 현황을 조회할 날짜(YYYY-MM-DD). 기본값은 오늘.
     onboardingFilterOn: false, // "온보딩미진행" 탭이 켜져 있는지 — 켜지면 온보딩 미진행 부스만 지도에 보여준다
+    locatedMarkerEl: null, // 검색으로 찾아가 반짝이는 중인 마커 — 지도 밖 클릭/부스 클릭 전까지 유지된다
   };
 
   const el = {
@@ -455,7 +456,8 @@
   }
 
   // 부스 위치로 화면을 이동 + 확대한다. 구역에 속한 부스라도 상세구역 지도가 아니라
-  // 항상 전체 배치도 화면에서 그 위치를 보여주고, 도착하면 마커를 잠깐 반짝여 눈에 띄게 한다.
+  // 항상 전체 배치도 화면에서 그 위치를 보여주고, 도착하면 마커를 반짝이게 한다
+  // (지도 밖을 클릭하거나 부스를 클릭하기 전까지 계속 반짝인다 — clearLocatedSparkle 참고).
   function locateBooth(boothId) {
     if (!state.event) return;
     const booth = state.event.booths.find((b) => b.id === boothId);
@@ -469,20 +471,54 @@
       const vb = state.viewBooths.find((b) => b.id === boothId);
       if (!vb || vb.xPct == null || vb.yPct == null) return;
       scrollToPct(vb.xPct, vb.yPct, LOCATE_ZOOM);
+      clearLocatedSparkle();
       const markerEl = state.markers.get(boothId);
       if (markerEl) {
-        markerEl.classList.remove('marker--located');
-        // 리플로우를 강제해 같은 부스를 연달아 찾아도 애니메이션이 다시 처음부터 재생되게 한다.
-        void markerEl.offsetWidth;
         markerEl.classList.add('marker--located');
-        setTimeout(() => markerEl.classList.remove('marker--located'), 1900);
+        state.locatedMarkerEl = markerEl;
       }
     });
   }
 
+  function clearLocatedSparkle() {
+    if (state.locatedMarkerEl) {
+      state.locatedMarkerEl.classList.remove('marker--located');
+      state.locatedMarkerEl = null;
+    }
+  }
+
+  // 지도 밖을 클릭하거나(부스 검색으로 반짝이는 걸 그만 보고 싶을 때) 아무 부스나 클릭하면
+  // (같은 부스를 다시 봐도, 다른 부스를 봐도) 반짝임을 끈다.
+  document.addEventListener('click', (e) => {
+    if (!state.locatedMarkerEl) return;
+    const clickedBoothMarker = e.target.closest('.booth-marker');
+    const clickedInsideMapStage = el.mapStage.contains(e.target);
+    if (clickedBoothMarker || !clickedInsideMapStage) {
+      clearLocatedSparkle();
+    }
+  });
+
+  // 사업자번호는 xxx-xx-xxxxx(하이픈 포함)와 xxxxxxxxxx(숫자만) 둘 다 검색되게, 숫자만 비교한다.
+  function digitsOnly(str) {
+    return (str || '').replace(/\D/g, '');
+  }
+
+  function findBoothByLocateQuery(query) {
+    const trimmed = query.trim();
+    if (!trimmed || !state.event) return null;
+    const byLabel = state.reportBoothByLabel.get(trimmed);
+    if (byLabel) return byLabel;
+    const digits = digitsOnly(trimmed);
+    if (digits.length >= 4) {
+      const match = state.event.booths.find((b) => b.businessNumber && digitsOnly(b.businessNumber) === digits);
+      if (match) return match.id;
+    }
+    return null;
+  }
+
   // 배치도 위 검색창: 매장명/부스번호/사업자번호로 검색해 목록에서 고르면 그 위치로 바로 이동한다.
   el.boothLocateSearch.addEventListener('change', () => {
-    const boothId = state.reportBoothByLabel.get(el.boothLocateSearch.value.trim());
+    const boothId = findBoothByLocateQuery(el.boothLocateSearch.value);
     if (!boothId) return;
     locateBooth(boothId);
     el.boothLocateSearch.value = '';
