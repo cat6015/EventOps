@@ -269,6 +269,7 @@
 .active-as-banner.is-onboarding strong { color: #92650a; }
 .active-as-banner.is-onboarding .active-as-chip { border-color: #fcd34d; color: #92650a; }
 .active-as-banner.is-onboarding .active-as-chip:hover { background: #fef3c7; }
+.active-as-empty { color: #92650a; opacity: 0.8; }
 
 .tab-onboarding-badge {
   display: inline-block;
