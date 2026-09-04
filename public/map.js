@@ -263,8 +263,9 @@
         `<button data-zone-id="${z.id}" class="${classes}">${escapeHtml(z.name)}${badge}</button>`
       );
     });
+    const totalCount = state.event.booths.length;
     const pendingCount = getOnboardingPendingBooths().length;
-    const pendingBadge = pendingCount > 0 ? ` <span class="tab-onboarding-badge">${pendingCount}</span>` : '';
+    const pendingBadge = totalCount > 0 ? ` <span class="tab-onboarding-badge">${pendingCount}/${totalCount}</span>` : '';
     tabs.push(
       `<button data-mode="onboarding" class="${state.onboardingFilterOn ? 'active' : ''}">온보딩미진행${pendingBadge}</button>`
     );
@@ -1020,14 +1021,14 @@
   function renderActiveAsBanner() {
     if (state.onboardingFilterOn) {
       el.activeAsBanner.classList.add('is-onboarding');
+      const totalCount = state.event.booths.length;
       const pending = getOnboardingPendingBooths();
-      el.activeAsBannerTitle.textContent = `온보딩 미진행 부스 (${pending.length}건)`;
+      el.activeAsBannerTitle.textContent = `온보딩 미진행 부스 (전체 ${totalCount}개 중 ${pending.length}개 미진행)`;
+      el.activeAsBanner.hidden = totalCount === 0;
       if (pending.length === 0) {
-        el.activeAsBanner.hidden = true;
-        el.activeAsList.innerHTML = '';
+        el.activeAsList.innerHTML = totalCount > 0 ? '<span class="active-as-empty">모든 부스가 온보딩완료되었습니다.</span>' : '';
         return;
       }
-      el.activeAsBanner.hidden = false;
       el.activeAsList.innerHTML = pending
         .map(
           (b) =>
