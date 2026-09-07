@@ -265,7 +265,10 @@
     });
     const totalCount = state.event.booths.length;
     const pendingCount = getOnboardingPendingBooths().length;
-    const pendingBadge = totalCount > 0 ? ` <span class="tab-onboarding-badge">${pendingCount}/${totalCount}</span>` : '';
+    const pendingBadge =
+      totalCount > 0
+        ? ` <span class="tab-onboarding-badge"><span class="tab-onboarding-pending">${pendingCount}</span> / ${totalCount}</span>`
+        : '';
     tabs.push(
       `<button data-mode="onboarding" class="${state.onboardingFilterOn ? 'active' : ''}">온보딩미진행${pendingBadge}</button>`
     );
