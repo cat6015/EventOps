@@ -12,6 +12,9 @@
     mode: 'select', // 'select' | 'add' | 'grid' | 'zone' | 'entrance'
     activeZoneId: null, // null = 전체 배치도 탭
     editingZoneId: null, // 구역 영역을 재설정하는 중이면 그 구역 id
+    editingParkingId: null, // 주차장 영역을 다시 지정하는 중이면 그 주차장 id
+    modalParkingId: null, // 주차장 모달이 수정 중인 주차장 id(새로 만들 때는 null)
+    pendingParkingRect: null,
     pendingAddPct: null,
     addSettings: null, // 부스추가 모드에서 직전에 저장한 번호/크기(모드를 끄기 전까지 유지)
     pendingGridRect: null,
@@ -57,6 +60,15 @@
     modeAddBtn: document.getElementById('mode-add-btn'),
     modeGridBtn: document.getElementById('mode-grid-btn'),
     modeZoneBtn: document.getElementById('mode-zone-btn'),
+    modeParkingBtn: document.getElementById('mode-parking-btn'),
+    parkingModal: document.getElementById('parking-modal'),
+    parkingModalTitle: document.getElementById('parking-modal-title'),
+    parkingModalName: document.getElementById('parking-modal-name'),
+    parkingModalError: document.getElementById('parking-modal-error'),
+    parkingModalDelete: document.getElementById('parking-modal-delete'),
+    parkingModalResize: document.getElementById('parking-modal-resize'),
+    parkingModalCancel: document.getElementById('parking-modal-cancel'),
+    parkingModalSave: document.getElementById('parking-modal-save'),
     modeEntranceBtn: document.getElementById('mode-entrance-btn'),
     modeHint: document.getElementById('mode-hint'),
     zoomInBtn: document.getElementById('zoom-in-btn'),
@@ -498,8 +510,9 @@
 
     el.mapEditorArea.hidden = false;
     el.modeZoneBtn.hidden = !!zone;
+    el.modeParkingBtn.hidden = !!zone;
     el.modeEntranceBtn.hidden = !!zone;
-    if (zone && (state.mode === 'zone' || state.mode === 'entrance')) setMode('select');
+    if (zone && (state.mode === 'zone' || state.mode === 'entrance' || state.mode === 'parking')) setMode('select');
 
     if (!floorplanPath && !usingCropFallback) {
       clearCropFallback();
@@ -535,6 +548,8 @@
     } else {
       state.markers = window.MapRender.renderBase(el.mapOverlay, state.event, { editable: true });
     }
+
+    attachParkingLotHandlers();
 
     const viewBoothById = new Map(state.viewBooths.map((b) => [b.id, b]));
     for (const [boothId, markerEl] of state.markers) {
@@ -628,9 +643,12 @@
   // ---- 모드 전환 ----
   function setMode(mode) {
     if (mode !== 'zone') state.editingZoneId = null;
+    if (mode !== 'parking') state.editingParkingId = null;
     if (mode !== 'add') state.addSettings = null;
     state.mode = mode;
-    [el.modeSelectBtn, el.modeAddBtn, el.modeGridBtn, el.modeZoneBtn, el.modeEntranceBtn].forEach((b) =>
+    // 선택/이동 모드가 아니면 주차장이 클릭을 가로채지 않게 한다(부스 추가/영역 드래그 등).
+    el.mapOverlay.classList.toggle('parking-passthrough', mode !== 'select');
+    [el.modeSelectBtn, el.modeAddBtn, el.modeGridBtn, el.modeZoneBtn, el.modeParkingBtn, el.modeEntranceBtn].forEach((b) =>
       b.classList.remove('active')
     );
     if (mode === 'select') {
@@ -648,6 +666,11 @@
       el.modeHint.textContent = state.editingZoneId
         ? '재설정할 새 영역을 전체 배치도 위에서 드래그하세요'
         : '전체 배치도 위에서 영역을 드래그해 새 구역을 지정하세요';
+    } else if (mode === 'parking') {
+      el.modeParkingBtn.classList.add('active');
+      el.modeHint.textContent = state.editingParkingId
+        ? '주차장의 새 영역을 전체 배치도 위에서 드래그하세요'
+        : '전체 배치도 위에서 주차장 영역을 드래그하세요 · 만든 주차장은 선택/이동 모드에서 클릭해 이름 변경/삭제';
     } else {
       el.modeEntranceBtn.classList.add('active');
       el.modeHint.textContent = '배치도 위에서 입구 위치를 클릭하세요';
@@ -657,6 +680,7 @@
   el.modeAddBtn.addEventListener('click', () => setMode('add'));
   el.modeGridBtn.addEventListener('click', () => setMode('grid'));
   el.modeZoneBtn.addEventListener('click', () => setMode('zone'));
+  el.modeParkingBtn.addEventListener('click', () => setMode('parking'));
   el.modeEntranceBtn.addEventListener('click', () => setMode('entrance'));
   setMode('select');
 
@@ -847,6 +871,9 @@
       } else if (state.mode === 'zone') {
         if (state.editingZoneId) updateZoneRect(state.editingZoneId, rect);
         else openZoneModal(rect);
+      } else if (state.mode === 'parking') {
+        if (state.editingParkingId) saveParkingLot(state.editingParkingId, { rect });
+        else openParkingModal(null, rect);
       }
     });
   }
@@ -870,7 +897,7 @@
 
   el.mapOverlay.addEventListener('mousedown', (e) => {
     if (!state.event || !hasRenderableFloorplan()) return;
-    if (state.mode === 'grid' || state.mode === 'zone') {
+    if (state.mode === 'grid' || state.mode === 'zone' || state.mode === 'parking') {
       startRegionDrag(e);
     } else if (state.mode === 'select' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       startRubberBandSelect(e);
@@ -1361,6 +1388,105 @@
       renderBoothList();
     } catch (err) {
       el.gridModalError.textContent = err.message;
+    }
+  });
+
+  // ---- 주차장 ----
+  // 선택/이동 모드에서 주차장을 클릭하면 이름 변경/삭제/영역 재지정 모달을 연다.
+  // 다른 모드(부스 추가 등)에서는 클릭이 그대로 배치도로 전달되어 주차장 위에도 부스를 놓을 수 있다.
+  function attachParkingLotHandlers() {
+    el.mapOverlay.querySelectorAll('.parking-lot').forEach((g) => {
+      g.classList.add('editable');
+      g.addEventListener('mousedown', (e) => {
+        if (state.mode === 'select' && !(e.shiftKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
+      });
+      g.addEventListener('click', (e) => {
+        if (state.mode !== 'select') return;
+        e.stopPropagation();
+        openParkingModal(g.dataset.parkingId, null);
+      });
+    });
+  }
+
+  function openParkingModal(lotId, rect) {
+    state.modalParkingId = lotId;
+    state.pendingParkingRect = rect;
+    const lot = lotId ? (state.event.parkingLots || []).find((p) => p.id === lotId) : null;
+    el.parkingModalTitle.textContent = lot ? '주차장 수정' : '주차장 추가';
+    el.parkingModalName.value = lot ? lot.name : '';
+    el.parkingModalError.textContent = '';
+    el.parkingModalDelete.hidden = !lot;
+    el.parkingModalResize.hidden = !lot;
+    el.parkingModal.hidden = false;
+    el.parkingModalName.focus();
+  }
+
+  function closeParkingModal() {
+    el.parkingModal.hidden = true;
+    state.modalParkingId = null;
+    state.pendingParkingRect = null;
+  }
+  el.parkingModalCancel.addEventListener('click', closeParkingModal);
+
+  // lotId가 있으면 수정(PATCH), 없으면 새로 만든다(POST).
+  async function saveParkingLot(lotId, fields) {
+    try {
+      if (lotId) {
+        const { parkingLot } = await api(`/api/events/${state.event.id}/parking-lots/${lotId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(fields),
+        });
+        const idx = state.event.parkingLots.findIndex((p) => p.id === lotId);
+        if (idx !== -1) state.event.parkingLots[idx] = parkingLot;
+      } else {
+        const { parkingLot } = await api(`/api/events/${state.event.id}/parking-lots`, {
+          method: 'POST',
+          body: JSON.stringify(fields),
+        });
+        state.event.parkingLots = state.event.parkingLots || [];
+        state.event.parkingLots.push(parkingLot);
+      }
+      if (state.editingParkingId) {
+        state.editingParkingId = null;
+        setMode('select');
+      }
+      renderMap();
+      return true;
+    } catch (err) {
+      if (el.parkingModal.hidden) alert(err.message);
+      else el.parkingModalError.textContent = err.message;
+      return false;
+    }
+  }
+
+  el.parkingModalSave.addEventListener('click', async () => {
+    const name = el.parkingModalName.value.trim();
+    if (!name) {
+      el.parkingModalError.textContent = '주차장 이름을 입력해주세요.';
+      return;
+    }
+    const fields = state.modalParkingId ? { name } : { name, rect: state.pendingParkingRect };
+    if (await saveParkingLot(state.modalParkingId, fields)) closeParkingModal();
+  });
+
+  el.parkingModalResize.addEventListener('click', () => {
+    const lotId = state.modalParkingId;
+    closeParkingModal();
+    state.editingParkingId = lotId;
+    setMode('parking');
+  });
+
+  el.parkingModalDelete.addEventListener('click', async () => {
+    const lotId = state.modalParkingId;
+    const lot = (state.event.parkingLots || []).find((p) => p.id === lotId);
+    if (!lot || !confirm(`주차장 "${lot.name}"을(를) 삭제할까요?`)) return;
+    try {
+      await api(`/api/events/${state.event.id}/parking-lots/${lotId}`, { method: 'DELETE' });
+      state.event.parkingLots = state.event.parkingLots.filter((p) => p.id !== lotId);
+      closeParkingModal();
+      renderMap();
+    } catch (err) {
+      el.parkingModalError.textContent = err.message;
     }
   });
 

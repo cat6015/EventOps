@@ -2,8 +2,6 @@
   const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 4;
   const LOCATE_ZOOM = 2;
-  // 구역 화면은 이미 그 구역만 크게 보여주므로, 검색으로 찾아갈 때 덜 확대한다.
-  const ZONE_LOCATE_ZOOM = 1.5;
 
   const state = {
     me: null,
@@ -28,7 +26,9 @@
     // 검색으로 찾아가 반짝이는 중인 부스 id — 마커 요소가 아니라 id로 기억해서, 줌/화면 이동/구역 전환으로
     // 지도가 다시 그려져도 계속 반짝인다. 그 부스의 정보 팝업을 사용자가 닫을 때 꺼진다.
     locatedBoothId: null,
-    popoverBoothId: null, // 지금 정보 팝업이 가리키는 부스 — 줌/스크롤 시 팝업을 마커 위치로 따라 옮긴다
+    popoverBoothId: null,
+    // 배치도를 돌려 보는 각도(0/90/180/270) — 보는 사람마다 편한 방향이 달라 이 브라우저에만 기억한다.
+    viewRotation: loadViewRotation(), // 지금 정보 팝업이 가리키는 부스 — 줌/스크롤 시 팝업을 마커 위치로 따라 옮긴다
   };
 
   const el = {
@@ -53,6 +53,7 @@
     zoomOutBtn: document.getElementById('zoom-out-btn'),
     zoomResetBtn: document.getElementById('zoom-reset-btn'),
     zoomLevel: document.getElementById('zoom-level'),
+    viewRotateBtn: document.getElementById('view-rotate-btn'),
     reportBoothSearch: document.getElementById('report-booth-search'),
     reportBoothDatalist: document.getElementById('report-booth-datalist'),
     boothLocateSearch: document.getElementById('booth-locate-search'),
@@ -315,6 +316,9 @@
   // map-stage의 크기를 기기 화면(뷰포트) 폭/높이에 맞춰 자동으로 계산한다.
   function fitStageToScreen(aspect) {
     state.currentAspect = aspect;
+    // 90°/270° 돌려 보면 화면에 보이는 가로세로 비율이 뒤집힌다.
+    const sideways = isViewSideways();
+    const shownAspect = sideways ? 1 / aspect : aspect;
     // 먼저 인라인 width를 비워 CSS(width:100%, 부모 padding 반영됨) 기준 실제 폭을 구한다.
     el.mapStage.style.width = '';
     el.mapStage.style.margin = '';
@@ -323,14 +327,28 @@
     const availableHeight = Math.max(240, window.innerHeight - stageTop - 16);
 
     let width = naturalWidth;
-    let height = width * aspect;
+    let height = width * shownAspect;
     if (height > availableHeight) {
       height = availableHeight;
-      width = height / aspect;
+      width = height / shownAspect;
       el.mapStage.style.width = `${Math.round(width)}px`;
       el.mapStage.style.margin = '0 auto';
     }
     el.mapStage.style.height = `${Math.round(height)}px`;
+    // 돌려 보는 중에는 배치도(캔버스)를 돌리기 전 크기로 잡아 두고 transform으로 돌린다.
+    // 돌리기 전 크기가 레이아웃에 남아 쓸데없는 스크롤이 생기지 않도록 흐름에서 빼 둔다
+    // (절대 위치 요소는 transform으로 돌린 뒤의 크기만 스크롤 범위에 반영된다).
+    // 크기는 스크롤바 유무에 흔들리지 않도록 방금 계산한 값으로 고정한다.
+    if (state.viewRotation) {
+      el.mapCanvas.style.width = `${Math.round(sideways ? height : width)}px`;
+      el.mapCanvas.style.height = `${Math.round(sideways ? width : height)}px`;
+      el.mapCanvas.style.position = 'absolute';
+      el.mapCanvas.style.left = '0';
+      el.mapCanvas.style.top = '0';
+    } else {
+      resetCanvasBox();
+    }
+    applyCanvasTransform();
   }
 
   function clearStageFit() {
@@ -338,7 +356,63 @@
     el.mapStage.style.width = '';
     el.mapStage.style.height = '';
     el.mapStage.style.margin = '';
+    resetCanvasBox();
   }
+
+  function resetCanvasBox() {
+    el.mapCanvas.style.width = '';
+    el.mapCanvas.style.height = '';
+    el.mapCanvas.style.position = '';
+    el.mapCanvas.style.left = '';
+    el.mapCanvas.style.top = '';
+  }
+
+  // ---- 배치도 보기 회전 ----
+  function loadViewRotation() {
+    try {
+      const v = Number(localStorage.getItem('mapViewRotation'));
+      return [0, 90, 180, 270].includes(v) ? v : 0;
+    } catch (err) {
+      return 0;
+    }
+  }
+
+  function isViewSideways() {
+    return state.viewRotation === 90 || state.viewRotation === 270;
+  }
+
+  // 확대 배율 + 보기 회전을 캔버스에 적용한다. 회전 기준점이 캔버스 왼쪽 위(0,0)이므로
+  // 돌린 뒤 캔버스가 다시 지도 영역 왼쪽 위에서 시작하도록 그만큼 평행이동한다.
+  function applyCanvasTransform() {
+    const z = state.zoom;
+    const w = el.mapCanvas.offsetWidth;
+    const h = el.mapCanvas.offsetHeight;
+    const shift = {
+      0: [0, 0],
+      90: [z * h, 0],
+      180: [z * w, z * h],
+      270: [0, z * w],
+    }[state.viewRotation] || [0, 0];
+    el.mapCanvas.style.transform = state.viewRotation
+      ? `translate(${shift[0]}px, ${shift[1]}px) rotate(${state.viewRotation}deg) scale(${z})`
+      : `scale(${z})`;
+  }
+
+  function rotateView() {
+    state.viewRotation = (state.viewRotation + 90) % 360;
+    try {
+      localStorage.setItem('mapViewRotation', String(state.viewRotation));
+    } catch (err) {
+      // 저장이 막혀 있어도(시크릿 창 등) 이번 화면에서는 그대로 돌려서 보여준다.
+    }
+    window.MapRender.setViewRotation(state.viewRotation);
+    closePopover();
+    resetZoom();
+    if (state.event) renderCurrentMap();
+  }
+
+  window.MapRender.setViewRotation(state.viewRotation);
+  el.viewRotateBtn.addEventListener('click', rotateView);
 
   window.addEventListener('resize', () => {
     if (state.currentAspect) fitStageToScreen(state.currentAspect);
@@ -346,7 +420,6 @@
 
   // ---- 확대/축소(줌) ----
   function applyZoom() {
-    el.mapCanvas.style.transform = `scale(${state.zoom})`;
     el.zoomLevel.textContent = `${Math.round(state.zoom * 100)}%`;
     // 확대가 막 시작/해제되는 순간에만(매 확대 단계마다가 아니라) 지도 영역 폭을 넓히거나
     // 되돌리고, 그 새 폭 기준으로 화면 맞춤을 다시 계산한다(PC에서 좁은 본문 폭 안에
@@ -357,6 +430,7 @@
       el.mapStage.classList.toggle('wide-zoom', shouldBeWide);
       if (state.currentAspect) fitStageToScreen(state.currentAspect);
     }
+    applyCanvasTransform();
     repositionPopover();
   }
 
@@ -465,49 +539,44 @@
     el.mapStage.scrollTop += r.top + r.height / 2 - (stage.top + stage.height / 2);
   }
 
-  // 부스가 속한 구역을 볼 수 있으면(상세 배치도가 있거나 전체 배치도에서 잘라 보여줄 수 있으면)
-  // 그 구역 id를, 아니면 null(전체 배치도)을 돌려준다.
-  function locateZoneIdFor(booth) {
-    if (!booth.zoneId) return null;
-    const zone = (state.event.zones || []).find((z) => z.id === booth.zoneId);
-    if (!zone || booth.zoneXPct == null) return null;
-    const viewable = zone.floorplanImagePath || (zone.rect && state.event.floorplanImagePath);
-    return viewable ? zone.id : null;
-  }
-
-  // 부스 위치로 화면을 이동 + 확대한다. 구역에 속한 부스는 그 구역 화면으로 넘어가서 보여주고,
-  // 도착하면 부스 정보 팝업을 띄우고 마커를 반짝이게 한다. 반짝임은 줌/화면 이동/구역 전환에도
-  // 유지되고, 사용자가 그 정보 팝업을 닫으면 꺼진다(dismissPopover 참고).
+  // 부스 위치로 화면을 이동 + 확대한다. 구역에 속한 부스라도 구역 화면으로 넘어가지 않고
+  // 전체 배치도에서 보여주며, 도착하면 부스 정보 팝업을 띄우고 마커와 그 부스가 속한 구역 영역을
+  // 함께 깜빡이게 한다. 깜빡임은 줌/화면 이동/다시 그리기에도 유지되고, 사용자가 그 정보 팝업을
+  // 닫으면 꺼진다(dismissPopover 참고).
   function locateBooth(boothId) {
     if (!state.event) return;
     const booth = state.event.booths.find((b) => b.id === boothId);
     if (!booth || booth.xPct == null) return;
     clearLocatedSparkle();
     closePopover();
-    const targetZoneId = locateZoneIdFor(booth);
     // "온보딩미진행" 필터가 켜져 있으면 찾는 부스가 화면에 없을 수 있으니 꺼서 전체를 보여준다.
-    if (state.activeZoneId !== targetZoneId || state.onboardingFilterOn) {
-      switchZoneTab(targetZoneId);
+    if (state.activeZoneId !== null || state.onboardingFilterOn) {
+      switchZoneTab(null);
     }
     state.locatedBoothId = boothId;
     applyLocatedSparkle();
     afterMapReady(() => {
       const markerEl = state.markers.get(boothId);
       if (!markerEl || state.locatedBoothId !== boothId) return;
-      centerOnMarker(markerEl, targetZoneId ? ZONE_LOCATE_ZOOM : LOCATE_ZOOM);
+      centerOnMarker(markerEl, LOCATE_ZOOM);
       applyLocatedSparkle();
       requestAnimationFrame(() => openPopover(boothId));
     });
   }
 
+  // 깜빡임은 전체 배치도에서만 보여준다(구역 탭으로 들어가 있으면 표시하지 않고, 돌아오면 다시 켠다).
   function applyLocatedSparkle() {
-    if (!state.locatedBoothId) return;
+    if (!state.locatedBoothId || state.activeZoneId) return;
     const markerEl = state.markers.get(state.locatedBoothId);
     if (markerEl) markerEl.classList.add('marker--located');
+    const booth = state.event.booths.find((b) => b.id === state.locatedBoothId);
+    const zoneEl = booth && booth.zoneId ? state.zoneMarkers.get(booth.zoneId) : null;
+    if (zoneEl) zoneEl.classList.add('zone-hotspot--located');
   }
 
   function clearLocatedSparkle() {
     el.mapOverlay.querySelectorAll('.marker--located').forEach((m) => m.classList.remove('marker--located'));
+    el.mapOverlay.querySelectorAll('.zone-hotspot--located').forEach((z) => z.classList.remove('zone-hotspot--located'));
     state.locatedBoothId = null;
   }
 
@@ -563,7 +632,8 @@
       const stageTop = el.mapStage.getBoundingClientRect().top;
       const availableHeight = Math.max(240, window.innerHeight - stageTop - 16);
       const availableWidth = el.mapStage.clientWidth || window.innerWidth;
-      const screenPxAspect = availableHeight / availableWidth; // 화면의 세로/가로 비율
+      // 화면의 세로/가로 비율 — 90°/270° 돌려 볼 때는 배치도 기준으로 뒤집힌 비율이 된다.
+      const screenPxAspect = isViewSideways() ? availableWidth / availableHeight : availableHeight / availableWidth;
       const viewHeightPx = (viewHPct / 100) * naturalH;
       const desiredWidthPx = viewHeightPx / screenPxAspect;
       const minWPct = Math.min(100, rect.wPct * 1.1);
@@ -574,7 +644,7 @@
 
       const cropAspect = (view.hPct * naturalH) / (view.wPct * naturalW);
       fitStageToScreen(cropAspect);
-      const containerWidth = el.mapStage.clientWidth || 1;
+      const containerWidth = el.mapCanvas.offsetWidth || el.mapStage.clientWidth || 1;
       const fullWidthPx = containerWidth * (100 / view.wPct);
       const fullHeightPx = fullWidthPx * (naturalH / naturalW);
       el.floorplanImg.style.width = `${fullWidthPx}px`;
@@ -702,8 +772,8 @@
     }
     applyAlertsToMap();
     applyLocatedSparkle();
-    // 구역을 바꾸는 등으로 지도가 다시 그려져도, 찾아간 부스가 이 화면에 있으면 정보 팝업을 다시 띄운다.
-    if (state.locatedBoothId && state.markers.has(state.locatedBoothId)) {
+    // 구역 탭에 다녀오는 등으로 전체 배치도가 다시 그려지면, 찾아간 부스의 정보 팝업을 다시 띄운다.
+    if (state.locatedBoothId && !state.activeZoneId && state.markers.has(state.locatedBoothId)) {
       const boothId = state.locatedBoothId;
       afterMapReady(() => {
         if (state.locatedBoothId === boothId && el.popover.hidden && state.markers.has(boothId)) openPopover(boothId);

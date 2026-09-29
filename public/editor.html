@@ -86,6 +86,7 @@
         <button class="secondary" id="mode-add-btn">부스 추가 모드</button>
         <button class="secondary" id="mode-grid-btn">부스 자동 추가 모드</button>
         <button class="secondary" id="mode-zone-btn">구역 추가 모드</button>
+        <button class="secondary" id="mode-parking-btn">주차장 추가 모드</button>
         <button class="secondary" id="mode-entrance-btn">입구 설정 모드</button>
         <span id="mode-hint" class="status-msg"></span>
       </div>
@@ -311,6 +312,22 @@
     <div class="modal-actions">
       <button class="secondary" id="zone-modal-cancel">취소</button>
       <button id="zone-modal-save">구역 만들기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="parking-modal" hidden>
+  <div class="modal-card">
+    <h2 id="parking-modal-title">주차장 추가</h2>
+    <div class="stacked-form">
+      <label>주차장 이름 <input type="text" id="parking-modal-name" placeholder="예: 제1주차장" /></label>
+    </div>
+    <p class="error" id="parking-modal-error"></p>
+    <div class="modal-actions">
+      <button class="danger" id="parking-modal-delete" hidden>삭제</button>
+      <button class="secondary" id="parking-modal-resize" hidden>영역 다시 지정</button>
+      <button class="secondary" id="parking-modal-cancel">취소</button>
+      <button id="parking-modal-save">저장</button>
     </div>
   </div>
 </div>

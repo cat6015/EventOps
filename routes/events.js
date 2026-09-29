@@ -177,6 +177,47 @@ function isValidRect(rect) {
   );
 }
 
+// 전체 배치도 위 주차장 표시(이름 + 드래그로 지정한 영역).
+router.post('/events/:id/parking-lots', requireAdmin, (req, res) => {
+  const event = store.getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
+  const { name, rect } = req.body || {};
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: '주차장 이름을 입력해주세요.' });
+  }
+  if (!isValidRect(rect)) {
+    return res.status(400).json({ error: '주차장 영역 값이 올바르지 않습니다.' });
+  }
+  const lot = store.addParkingLot(event.id, { id: crypto.randomUUID(), name: String(name).trim(), rect });
+  res.json({ ok: true, parkingLot: lot });
+});
+
+router.patch('/events/:id/parking-lots/:lotId', requireAdmin, (req, res) => {
+  const event = store.getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
+  const { name, rect } = req.body || {};
+  if (name !== undefined && !String(name).trim()) {
+    return res.status(400).json({ error: '주차장 이름을 입력해주세요.' });
+  }
+  if (rect !== undefined && !isValidRect(rect)) {
+    return res.status(400).json({ error: '주차장 영역 값이 올바르지 않습니다.' });
+  }
+  const lot = store.updateParkingLot(event.id, req.params.lotId, {
+    name: name !== undefined ? String(name).trim() : undefined,
+    rect,
+  });
+  if (!lot) return res.status(404).json({ error: '주차장을 찾을 수 없습니다.' });
+  res.json({ ok: true, parkingLot: lot });
+});
+
+router.delete('/events/:id/parking-lots/:lotId', requireAdmin, (req, res) => {
+  const event = store.getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
+  const removed = store.removeParkingLot(event.id, req.params.lotId);
+  if (!removed) return res.status(404).json({ error: '주차장을 찾을 수 없습니다.' });
+  res.json({ ok: true });
+});
+
 // 규모가 큰 행사에서 전체 배치도를 여러 구역으로 나누고, 구역마다 별도의 상세 배치도를
 // 두기 위한 구역(zone) 관리 엔드포인트. rect는 전체 배치도 위에서 그 구역이 차지하는
 // 영역(드래그로 지정)이며, 구역에 속한 부스의 위치는 이 rect를 기준으로 자동 환산된다.

@@ -36,6 +36,7 @@ function renderEntranceMarker(svg, entrance) {
   text.textContent = '입구';
   g.appendChild(text);
   svg.appendChild(g);
+  applyUprightText(text, 0, 0);
   return g;
 }
 
@@ -88,42 +89,71 @@ function updateBoothFontSize(markerEl, deg, k) {
 // 오버레이는 preserveAspectRatio="none"이라 가로/세로 단위 길이가 화면에서 서로 다르다.
 // 그냥 rotate()하면 배치도가 정사각형이 아닐 때 부스가 찌그러져 보이므로, 화면 비율(k)로
 // 가로를 늘린 공간에서 회전한 뒤 다시 되돌려 "화면 기준"으로 반듯하게 회전시킨다.
+// 비율은 CSS 레이아웃 크기로 잰다(지도 보기 회전/확대 transform의 영향을 받지 않도록).
 function overlayAspect(svg) {
-  const r = svg ? svg.getBoundingClientRect() : null;
-  return r && r.width > 0 && r.height > 0 ? r.width / r.height : 1;
+  if (!svg) return 1;
+  if (svg.clientWidth > 0 && svg.clientHeight > 0) return svg.clientWidth / svg.clientHeight;
+  const r = svg.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 ? r.width / r.height : 1;
 }
 
 function rotationTransform(k, deg) {
   return `scale(${1 / k}, 1) rotate(${deg}) scale(${k}, 1)`;
 }
 
+// 지도 화면(map.js)에서 배치도 전체를 돌려 보는 각도(0/90/180/270). 글자들은 이만큼 반대로
+// 돌려서 지도를 돌려도 항상 똑바로 읽히게 한다. 편집기는 쓰지 않으므로 항상 0이다.
+let viewRotation = 0;
+function setViewRotation(deg) {
+  viewRotation = normalizeRotation(deg);
+}
+
+function isSideways(deg) {
+  return Math.abs((normalizeRotation(deg) % 180) - 90) < 1;
+}
+
+// 글자(text)를 (cx, cy)를 중심으로 extraDeg + 지도 보기 회전만큼 반대로 돌려 화면에서 똑바로 세운다.
+function applyUprightText(text, extraDeg, cx, cy, k) {
+  const total = normalizeRotation(extraDeg + viewRotation);
+  if (!total) {
+    text.removeAttribute('transform');
+    return;
+  }
+  const kk = k || overlayAspect(text.ownerSVGElement);
+  const rot = rotationTransform(kk, -total);
+  text.setAttribute('transform', cx || cy ? `translate(${cx}, ${cy}) ${rot} translate(${-cx}, ${-cy})` : rot);
+}
+
 function applyBoothTransform(markerEl) {
   const x = markerEl.dataset.x;
   const y = markerEl.dataset.y;
   const deg = Number(markerEl.dataset.rotation) || 0;
-  if (!deg) {
+  const text = markerEl.querySelector('text');
+  if (!deg && !viewRotation) {
     markerEl.setAttribute('transform', `translate(${x}, ${y})`);
-    const text = markerEl.querySelector('text');
     if (text) text.removeAttribute('transform');
     updateBoothFontSize(markerEl, 0, 1);
     return;
   }
   const k = overlayAspect(markerEl.ownerSVGElement);
-  markerEl.setAttribute('transform', `translate(${x}, ${y}) ${rotationTransform(k, deg)}`);
-  updateBoothFontSize(markerEl, deg, k);
-  // 부스 번호는 회전과 상관없이 항상 똑바로 읽히도록 반대로 돌려 둔다.
-  const text = markerEl.querySelector('text');
-  if (text) text.setAttribute('transform', rotationTransform(k, -deg));
+  markerEl.setAttribute('transform', deg ? `translate(${x}, ${y}) ${rotationTransform(k, deg)}` : `translate(${x}, ${y})`);
+  // 부스 번호는 부스 회전/지도 보기 회전과 상관없이 항상 똑바로 읽히도록 반대로 돌려 둔다.
+  updateBoothFontSize(markerEl, deg + viewRotation, k);
+  if (text) applyUprightText(text, deg, 0, 0, k);
 }
 
-// 화면 크기/비율이 바뀌면(배치도 이미지 로드, 창 크기 변경 등) 회전 보정값을 다시 계산한다.
+// 화면 크기/비율이 바뀌면(배치도 이미지 로드, 창 크기 변경 등) 회전 보정값과 글자 배치를 다시 계산한다.
+function refreshOverlayText(svg) {
+  svg.querySelectorAll('.booth-marker').forEach(applyBoothTransform);
+  svg.querySelectorAll('.zone-hotspot, .parking-lot').forEach(layoutZoneHotspotLabel);
+  svg.querySelectorAll('.entrance-marker text').forEach((t) => applyUprightText(t, 0, 0, 0));
+}
+
 const watchedOverlays = new WeakSet();
 function watchOverlayAspect(svg) {
-  if (watchedOverlays.has(svg) || typeof ResizeObserver === 'undefined') return;
+  if (!svg || watchedOverlays.has(svg) || typeof ResizeObserver === 'undefined') return;
   watchedOverlays.add(svg);
-  new ResizeObserver(() => {
-    svg.querySelectorAll('.booth-marker[data-rotation]').forEach(applyBoothTransform);
-  }).observe(svg);
+  new ResizeObserver(() => refreshOverlayText(svg)).observe(svg);
 }
 
 function normalizeRotation(deg) {
@@ -157,7 +187,7 @@ function renderBoothMarker(svg, booth, { editable = false } = {}) {
   g.appendChild(text);
   svg.appendChild(g);
   applyBoothTransform(g);
-  if (rotation) watchOverlayAspect(svg);
+  if (rotation || viewRotation) watchOverlayAspect(svg);
   return g;
 }
 
@@ -166,6 +196,7 @@ function renderBoothMarker(svg, booth, { editable = false } = {}) {
 function renderBase(svg, event, { editable = false } = {}) {
   clearSvg(svg);
   const markers = new Map();
+  renderParkingLots(svg, event);
   renderEntranceMarker(svg, event.entrance);
   for (const booth of event.booths) {
     markers.set(booth.id, renderBoothMarker(svg, booth, { editable }));
@@ -271,20 +302,66 @@ function renderZoneHotspot(svg, zone, index = 0) {
   const { xPct, yPct, wPct, hPct } = zone.rect;
   const color = ZONE_COLORS[index % ZONE_COLORS.length];
   const g = svgEl('g', { class: 'zone-hotspot', 'data-zone-id': zone.id, style: `--zone-color: ${color}` });
+  g.dataset.name = zone.name || '';
   g.appendChild(svgEl('rect', { x: xPct, y: yPct, width: wPct, height: hPct, rx: 1 }));
-  const { fontSize, lines } = layoutZoneLabel(zone.name || '', wPct, hPct);
+  g.appendChild(svgEl('text'));
+  svg.appendChild(g);
+  layoutZoneHotspotLabel(g);
+  if (viewRotation) watchOverlayAspect(svg);
+  return g;
+}
+
+// 주차장: 구역과 구분되도록 회색 계열 실선 영역 + "P 이름" 표시. 클릭해도 구역처럼
+// 화면이 바뀌지 않는다(편집기에서만 눌러서 이름 변경/삭제).
+function renderParkingLot(svg, lot) {
+  if (!lot || !lot.rect) return null;
+  const { xPct, yPct, wPct, hPct } = lot.rect;
+  const g = svgEl('g', { class: 'parking-lot', 'data-parking-id': lot.id });
+  g.dataset.name = `P ${lot.name || ''}`.trim();
+  g.appendChild(svgEl('rect', { x: xPct, y: yPct, width: wPct, height: hPct, rx: 0.6 }));
+  g.appendChild(svgEl('text'));
+  svg.appendChild(g);
+  layoutZoneHotspotLabel(g);
+  if (viewRotation) watchOverlayAspect(svg);
+  return g;
+}
+
+function renderParkingLots(svg, event) {
+  const markers = new Map();
+  for (const lot of event.parkingLots || []) {
+    const g = renderParkingLot(svg, lot);
+    if (g) markers.set(lot.id, g);
+  }
+  return markers;
+}
+
+// 구역 이름을 구역 영역 안에 줄바꿈해 배치한다. 지도 보기를 90°/270° 돌리면 화면에서
+// 구역의 가로/세로가 뒤바뀌므로, 그 뒤바뀐 폭/높이 기준으로 줄을 나누고 글자를 똑바로 세운다.
+function layoutZoneHotspotLabel(g) {
+  const rect = g.querySelector('rect');
+  const text = g.querySelector('text');
+  if (!rect || !text) return;
+  const xPct = Number(rect.getAttribute('x'));
+  const yPct = Number(rect.getAttribute('y'));
+  const wPct = Number(rect.getAttribute('width'));
+  const hPct = Number(rect.getAttribute('height'));
+  const k = viewRotation ? overlayAspect(g.ownerSVGElement) : 1;
+  const box = isSideways(viewRotation) ? { w: hPct / k, h: wPct * k } : { w: wPct, h: hPct };
+  const { fontSize, lines } = layoutZoneLabel(g.dataset.name || '', box.w, box.h);
   const lineH = fontSize * ZONE_LABEL_LINE_HEIGHT;
   const cx = xPct + wPct / 2;
-  const firstY = yPct + hPct / 2 - ((lines.length - 1) * lineH) / 2;
-  const text = svgEl('text', { x: cx, y: firstY, 'font-size': fontSize });
+  const cy = yPct + hPct / 2;
+  const firstY = cy - ((lines.length - 1) * lineH) / 2;
+  while (text.firstChild) text.removeChild(text.firstChild);
+  text.setAttribute('x', cx);
+  text.setAttribute('y', firstY);
+  text.setAttribute('font-size', fontSize);
   lines.forEach((l, i) => {
     const tspan = svgEl('tspan', { x: cx, y: firstY + i * lineH });
     tspan.textContent = l;
     text.appendChild(tspan);
   });
-  g.appendChild(text);
-  svg.appendChild(g);
-  return g;
+  applyUprightText(text, 0, cx, cy, k);
 }
 
 // 구역이 있는 행사의 전체 배치도: 구역 영역(hotspot, 클릭하면 상세 배치도로 이동)을
@@ -293,6 +370,7 @@ function renderZoneHotspot(svg, zone, index = 0) {
 // 반환값: { boothMarkers, zoneMarkers } (각각 id -> <g> 엘리먼트 맵)
 function renderOverview(svg, event, { editable = false } = {}) {
   clearSvg(svg);
+  renderParkingLots(svg, event);
   const zoneMarkers = new Map();
   const zoneById = new Map();
   (event.zones || []).forEach((zone, index) => {
@@ -414,9 +492,11 @@ window.MapRender = {
   renderEntranceMarker,
   renderBoothMarker,
   renderZoneHotspot,
+  renderParkingLot,
   setBoothMarkerPosition,
   setBoothMarkerRotation,
   normalizeRotation,
+  setViewRotation,
   setBoothMarkerSize,
   setBoothMarkerSelected,
   setBoothAlertState,

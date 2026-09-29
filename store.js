@@ -184,6 +184,7 @@ function withDefaults(event) {
   if (!event) return event;
   if (event.isDefault === undefined) event.isDefault = false;
   if (!Array.isArray(event.zones)) event.zones = [];
+  if (!Array.isArray(event.parkingLots)) event.parkingLots = [];
   if (!Array.isArray(event.assignments)) event.assignments = [];
   if (!Array.isArray(event.onboardingLogs)) event.onboardingLogs = [];
   for (const b of event.booths) {
@@ -220,6 +221,7 @@ function createEvent({ id, name, date, createdBy }) {
     floorplanOriginalName: null,
     entrance: null,
     zones: [],
+    parkingLots: [],
     booths: [],
     assignments: [],
     onboardingLogs: [],
@@ -308,6 +310,41 @@ function removeZone(eventId, zoneId) {
   if (idx === -1) return null;
   const [removed] = event.zones.splice(idx, 1);
   event.assignments = event.assignments.filter((a) => a.zoneId !== zoneId);
+  saveEvent(event);
+  return removed;
+}
+
+// ---- parkingLots(주차장) ----
+// 전체 배치도 위에 주차장 위치/범위를 표시하기 위한 영역. 구역과 달리 부스가 속하거나
+// 상세 배치도를 두지 않고, 이름과 영역(rect)만 가진다.
+function addParkingLot(eventId, { id, name, rect }) {
+  const event = getEvent(eventId);
+  if (!event) return null;
+  const now = new Date().toISOString();
+  const lot = { id, name, rect, createdAt: now, updatedAt: now };
+  event.parkingLots.push(lot);
+  saveEvent(event);
+  return lot;
+}
+
+function updateParkingLot(eventId, lotId, { name, rect }) {
+  const event = getEvent(eventId);
+  if (!event) return null;
+  const lot = event.parkingLots.find((p) => p.id === lotId);
+  if (!lot) return null;
+  if (name !== undefined) lot.name = name;
+  if (rect !== undefined) lot.rect = rect;
+  lot.updatedAt = new Date().toISOString();
+  saveEvent(event);
+  return lot;
+}
+
+function removeParkingLot(eventId, lotId) {
+  const event = getEvent(eventId);
+  if (!event) return null;
+  const idx = event.parkingLots.findIndex((p) => p.id === lotId);
+  if (idx === -1) return null;
+  const [removed] = event.parkingLots.splice(idx, 1);
   saveEvent(event);
   return removed;
 }
@@ -859,6 +896,10 @@ module.exports = {
   updateZone,
   setZoneFloorplan,
   removeZone,
+  // parking lots
+  addParkingLot,
+  updateParkingLot,
+  removeParkingLot,
   // assignments
   addAssignment,
   removeAssignment,

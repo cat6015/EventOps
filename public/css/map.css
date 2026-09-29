@@ -146,6 +146,9 @@
 .map-canvas.cropped { overflow: hidden; }
 .map-canvas.cropped img.floorplan { position: absolute; max-width: none; }
 .map-stage.cropped img.floorplan { position: absolute; max-width: none; }
+/* 잘라 보기에서 원본 이미지가 틀 밖으로 튀어나와 스크롤 범위를 늘리지 않도록 틀(캔버스)에서 자른다
+   (지도 보기를 회전하면 튀어나온 부분이 오른쪽/아래로 가서 쓸데없는 스크롤이 생긴다) */
+.map-stage.cropped .map-canvas { overflow: hidden; }
 /* 미리보기는 실제 구역 범위보다 살짝 넓게 보여주므로, 실제 구역 경계를 점선으로 표시해 구분한다 */
 .map-canvas.cropped .map-overlay,
 .map-stage.cropped .map-overlay {
@@ -155,6 +158,30 @@
 
 .zoom-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .zoom-toolbar .zoom-level { font-size: 0.85rem; color: #6b7280; min-width: 48px; text-align: center; }
+
+/* 주차장: 구역(색색의 점선)과 구분되도록 회색 계열 실선 + 옅은 사선 느낌의 채움 */
+.parking-lot rect {
+  fill: #64748b;
+  fill-opacity: 0.22;
+  stroke: #475569;
+  stroke-width: 0.35;
+}
+.parking-lot text {
+  fill: #1e293b;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 0.35px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+/* 지도 화면에서는 주차장이 클릭을 가로채지 않게 하고, 편집기에서만 눌러서 수정할 수 있게 한다 */
+.parking-lot { pointer-events: none; }
+.parking-lot.editable { pointer-events: auto; cursor: pointer; }
+.parking-lot.editable:hover rect { fill-opacity: 0.35; }
+.map-overlay.parking-passthrough .parking-lot.editable { pointer-events: none; }
 
 .zone-hotspot { cursor: pointer; }
 /* 구역마다 --zone-color(map-render.js에서 지정)로 색을 달리하고, 지도 위에서도 이름이
@@ -190,6 +217,19 @@
 @keyframes zone-hotspot-blink {
   0%, 100% { fill: rgba(220, 38, 38, 0.12); }
   50% { fill: rgba(220, 38, 38, 0.38); }
+}
+
+/* 검색으로 찾은 부스가 속한 구역은 그 구역 색으로 진하게 깜빡여 위치를 한눈에 알게 한다
+   (A/S 빨간 깜빡임보다 뒤에 둬서, 찾는 중에는 이 표시가 우선한다) */
+.zone-hotspot.zone-hotspot--located rect {
+  fill: var(--zone-color, #1f6feb);
+  stroke: var(--zone-color, #1f6feb);
+  stroke-dasharray: none;
+  animation: zone-hotspot-located-blink 0.6s ease-in-out infinite;
+}
+@keyframes zone-hotspot-located-blink {
+  0%, 100% { fill-opacity: 0.15; stroke-width: 0.4; }
+  50% { fill-opacity: 0.6; stroke-width: 0.9; }
 }
 
 .zone-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -425,6 +465,7 @@
 .legend-dot.normal { background: #1f6feb; }
 .legend-dot.onboarding { background: #f59e0b; }
 .legend-dot.installed { background: #1a7f37; }
+.legend-dot.parking { background: rgba(100, 116, 139, 0.45); border: 1px solid #475569; }
 .legend-dot.alert { background: #dc2626; }
 
 .event-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
