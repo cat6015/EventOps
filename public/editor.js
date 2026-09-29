@@ -71,6 +71,10 @@
     batchApplyBtn: document.getElementById('batch-apply-btn'),
     batchClearBtn: document.getElementById('batch-clear-btn'),
     batchDeleteBtn: document.getElementById('batch-delete-btn'),
+    batchRotation: document.getElementById('batch-rotation'),
+    batchRotationApplyBtn: document.getElementById('batch-rotation-apply-btn'),
+    rotateCwBtn: document.getElementById('rotate-cw-btn'),
+    rotateCcwBtn: document.getElementById('rotate-ccw-btn'),
     alignLeftBtn: document.getElementById('align-left-btn'),
     alignRightBtn: document.getElementById('align-right-btn'),
     alignTopBtn: document.getElementById('align-top-btn'),
@@ -87,6 +91,7 @@
     boothListBody: document.getElementById('booth-list-body'),
     boothModal: document.getElementById('booth-modal'),
     boothModalTitle: document.getElementById('booth-modal-title'),
+    boothModalZone: document.getElementById('booth-modal-zone'),
     boothModalNumber: document.getElementById('booth-modal-number'),
     boothModalWidth: document.getElementById('booth-modal-width'),
     boothModalHeight: document.getElementById('booth-modal-height'),
@@ -95,6 +100,7 @@
     boothModalCorpNumber: document.getElementById('booth-modal-corp-number'),
     boothModalOnboardingContact: document.getElementById('booth-modal-onboarding-contact'),
     boothModalVan: document.getElementById('booth-modal-van'),
+    boothModalEquipmentMemo: document.getElementById('booth-modal-equipment-memo'),
     boothModalError: document.getElementById('booth-modal-error'),
     boothModalDelete: document.getElementById('booth-modal-delete'),
     boothModalCancel: document.getElementById('booth-modal-cancel'),
@@ -554,7 +560,7 @@
     el.boothListBody.innerHTML = booths
       .map(
         (b) => `<tr>
-          <td class="num">${escapeHtml(b.number)}</td>
+          <td class="num">${escapeHtml(window.MapRender.boothLabel(b, state.event.zones))}</td>
           <td>${escapeHtml(b.storeName || '')}</td>
           <td>${escapeHtml(zoneNameOf(b.zoneId))}</td>
           <td>${b.xPct === null ? '미지정' : `${b.xPct.toFixed(1)}, ${b.yPct.toFixed(1)}`}</td>
@@ -677,21 +683,79 @@
   }
 
   // 부스추가 모드에서 팝업 없이 이전 설정값 그대로(번호만 +1) 부스를 바로 생성
+  // ---- 부스 구역 분류 ----
+  function findZone(zoneId) {
+    return zoneId ? (state.event.zones || []).find((z) => z.id === zoneId) || null : null;
+  }
+
+  function rectContains(rect, pt) {
+    return pt.xPct >= rect.xPct && pt.xPct <= rect.xPct + rect.wPct && pt.yPct >= rect.yPct && pt.yPct <= rect.yPct + rect.hPct;
+  }
+
+  // 전체 배치도 좌표가 어떤 구역 영역 안에 있으면 그 구역 id를 돌려준다.
+  function zoneIdAtOverviewPoint(pt) {
+    const zone = (state.event.zones || []).find((z) => z.rect && rectContains(z.rect, pt));
+    return zone ? zone.id : null;
+  }
+
+  // 현재 화면(전체 배치도 또는 구역 탭) 좌표를 전체 배치도 좌표로 바꾼다.
+  function viewToOverview(pt) {
+    const zone = getActiveZone();
+    if (!zone || !zone.rect) return pt;
+    return {
+      xPct: zone.rect.xPct + (pt.xPct * zone.rect.wPct) / 100,
+      yPct: zone.rect.yPct + (pt.yPct * zone.rect.hPct) / 100,
+    };
+  }
+
+  // 현재 화면에서 클릭한 위치/입력한 크기로 targetZoneId 구역(없으면 전체 배치도)에 부스를
+  // 만들 때 서버에 보낼 좌표/크기를 계산한다. 구역 부스는 그 구역 상세 배치도 기준 값으로 저장되므로
+  // 좌표계가 다르면 환산하고, 지정한 위치가 구역 영역 밖이면 구역 가운데에 놓는다.
+  function planBoothPlacement(viewPt, viewSize, targetZoneId) {
+    const activeZone = getActiveZone();
+    if ((targetZoneId || null) === (state.activeZoneId || null)) {
+      return { zoneId: targetZoneId || null, ...viewPt, ...viewSize };
+    }
+    const scaleW = activeZone && activeZone.rect ? activeZone.rect.wPct / 100 : 1;
+    const scaleH = activeZone && activeZone.rect ? activeZone.rect.hPct / 100 : 1;
+    let ov = viewToOverview(viewPt);
+    const ovW = viewSize.wPct * scaleW;
+    const ovH = viewSize.hPct * scaleH;
+    const target = findZone(targetZoneId);
+    if (!target) return { zoneId: null, ...ov, wPct: ovW, hPct: ovH };
+    if (!target.rect) return { zoneId: target.id, xPct: 50, yPct: 50, ...viewSize };
+    const r = target.rect;
+    if (!rectContains(r, ov)) ov = { xPct: r.xPct + r.wPct / 2, yPct: r.yPct + r.hPct / 2 };
+    const clampSize = (v) => Math.min(100, Math.max(0.5, v));
+    return {
+      zoneId: target.id,
+      xPct: ((ov.xPct - r.xPct) / r.wPct) * 100,
+      yPct: ((ov.yPct - r.yPct) / r.hPct) * 100,
+      wPct: clampSize((ovW * 100) / r.wPct),
+      hPct: clampSize((ovH * 100) / r.hPct),
+    };
+  }
+
+  // 전체 배치도에서 구역 영역 안을 클릭해 만들면 그 구역으로 자동 분류한다.
+  function defaultZoneIdForAdd(viewPt) {
+    if (state.activeZoneId) return state.activeZoneId;
+    return viewPt ? zoneIdAtOverviewPoint(viewPt) : null;
+  }
+
   async function createBoothFromAddSettings(pct) {
     const next = nextBoothNumber(state.addSettings.number);
+    const viewSize = { wPct: state.addSettings.wPct, hPct: state.addSettings.hPct };
     try {
       const { booth } = await api(`/api/events/${state.event.id}/booths`, {
         method: 'POST',
         body: JSON.stringify({
           number: next,
-          wPct: state.addSettings.wPct,
-          hPct: state.addSettings.hPct,
-          zoneId: state.activeZoneId,
-          ...pct,
+          ...planBoothPlacement(pct, viewSize, defaultZoneIdForAdd(pct)),
         }),
       });
       state.event.booths.push(booth);
-      state.addSettings = { number: booth.number, wPct: booth.wPct, hPct: booth.hPct };
+      // 다음 부스도 지금 화면 기준 같은 크기로 만들 수 있도록, 환산 전(화면 기준) 크기를 기억한다.
+      state.addSettings = { number: booth.number, ...viewSize };
       updateAddModeHint();
       renderMap();
       renderBoothList();
@@ -844,6 +908,7 @@
         const size = boothSize(first);
         el.batchWidth.value = Math.round(size.wPct * 100) / 100;
         el.batchHeight.value = Math.round(size.hPct * 100) / 100;
+        el.batchRotation.value = window.MapRender.normalizeRotation(first.rotation);
       }
     }
   }
@@ -916,6 +981,42 @@
     } catch (err) {
       alert(err.message);
     }
+  });
+
+  // ---- 부스 회전 ----
+  // getRotation(booth) -> 새 각도. 각 부스는 자기 중심을 기준으로 회전한다.
+  async function rotateSelected(getRotation) {
+    if (state.selected.size === 0) return;
+    const items = Array.from(state.selected).map((id) => {
+      const booth = state.event.booths.find((b) => b.id === id);
+      return { id, rotation: window.MapRender.normalizeRotation(getRotation(booth)) };
+    });
+    try {
+      const { booths } = await api(`/api/events/${state.event.id}/booths/bulk`, {
+        method: 'PATCH',
+        body: JSON.stringify({ items }),
+      });
+      for (const b of booths) {
+        const local = state.event.booths.find((x) => x.id === b.id);
+        if (local) local.rotation = b.rotation;
+        const markerEl = state.markers.get(b.id);
+        if (markerEl) window.MapRender.setBoothMarkerRotation(markerEl, b.rotation);
+      }
+      updateSelectionUI();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  el.rotateCwBtn.addEventListener('click', () => rotateSelected((b) => (b.rotation || 0) + 90));
+  el.rotateCcwBtn.addEventListener('click', () => rotateSelected((b) => (b.rotation || 0) - 90));
+  el.batchRotationApplyBtn.addEventListener('click', () => {
+    const deg = Number(el.batchRotation.value);
+    if (!Number.isFinite(deg)) {
+      alert('회전 각도를 올바르게 입력해주세요.');
+      return;
+    }
+    rotateSelected(() => deg);
   });
 
   // ---- 부스 드래그(단일/다중 이동) ----
@@ -1325,12 +1426,34 @@
     }
   });
 
+  // 이미 있는 부스의 구역 분류를 바꾼다. 서버가 전체 배치도 좌표 기준으로 새 구역 좌표/크기를
+  // 환산하므로, 부스 위치가 새 구역 영역 밖이면(또는 위치 미지정이면) 구역 가운데로 옮겨 보낸다.
+  async function moveBoothToZone(booth, zoneId) {
+    const zone = findZone(zoneId);
+    let pt = booth.xPct === null || booth.xPct === undefined ? null : { xPct: booth.xPct, yPct: booth.yPct };
+    if (zone && zone.rect && (!pt || !rectContains(zone.rect, pt))) {
+      pt = { xPct: zone.rect.xPct + zone.rect.wPct / 2, yPct: zone.rect.yPct + zone.rect.hPct / 2 };
+    }
+    if (!pt) throw new Error('배치도 위치가 지정되지 않은 부스는 구역 영역이 있는 구역으로만 옮길 수 있습니다.');
+    const { booth: moved } = await api(`/api/events/${state.event.id}/booths/${booth.id}/zone`, {
+      method: 'PATCH',
+      body: JSON.stringify({ zoneId, ...pt }),
+    });
+    return moved;
+  }
+
   // ---- 부스 추가/수정/삭제 모달 ----
   function openBoothModal(mode, boothId) {
     state.modalBoothId = boothId;
     el.boothModalError.textContent = '';
     el.boothModalNumber.value = '';
+    const zones = state.event.zones || [];
+    el.boothModalZone.innerHTML = ['<option value="">구역 없음</option>']
+      .concat(zones.map((z) => `<option value="${z.id}">${escapeHtml(z.name)}</option>`))
+      .join('');
+    el.boothModalZone.disabled = zones.length === 0;
     if (mode === 'add') {
+      el.boothModalZone.value = defaultZoneIdForAdd(state.pendingAddPct) || '';
       el.boothModalTitle.textContent = '새 부스';
       el.boothModalDelete.hidden = true;
       el.boothModalWidth.value = DEFAULT_BOOTH_SIZE;
@@ -1340,10 +1463,12 @@
       el.boothModalCorpNumber.value = '';
       el.boothModalOnboardingContact.value = '';
       el.boothModalVan.value = '';
+      el.boothModalEquipmentMemo.value = '';
     } else {
       const booth = state.event.booths.find((b) => b.id === boothId);
-      el.boothModalTitle.textContent = `부스 ${booth.number} 수정`;
+      el.boothModalTitle.textContent = `부스 ${window.MapRender.boothLabel(booth, state.event.zones)} 수정`;
       el.boothModalNumber.value = booth.number;
+      el.boothModalZone.value = booth.zoneId || '';
       el.boothModalWidth.value = booth.wPct || DEFAULT_BOOTH_SIZE;
       el.boothModalHeight.value = booth.hPct || DEFAULT_BOOTH_SIZE;
       el.boothModalStoreName.value = booth.storeName || '';
@@ -1351,6 +1476,7 @@
       el.boothModalCorpNumber.value = booth.corpNumber || '';
       el.boothModalOnboardingContact.value = booth.onboardingContact || '';
       el.boothModalVan.value = booth.van || '';
+      el.boothModalEquipmentMemo.value = booth.equipmentMemo || '';
       el.boothModalDelete.hidden = false;
     }
     el.boothModal.hidden = false;
@@ -1372,6 +1498,8 @@
     const corpNumber = el.boothModalCorpNumber.value.trim();
     const onboardingContact = el.boothModalOnboardingContact.value.trim();
     const van = el.boothModalVan.value.trim();
+    const equipmentMemo = el.boothModalEquipmentMemo.value.trim();
+    const selectedZoneId = el.boothModalZone.value || null;
     if (!number) {
       el.boothModalError.textContent = '부스 번호를 입력해주세요.';
       return;
@@ -1380,11 +1508,14 @@
       if (state.modalBoothId) {
         const { booth } = await api(`/api/events/${state.event.id}/booths/${state.modalBoothId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ number, wPct, hPct, storeName, businessNumber, corpNumber, onboardingContact, van }),
+          body: JSON.stringify({ number, wPct, hPct, storeName, businessNumber, corpNumber, onboardingContact, van, equipmentMemo }),
         });
-        const local = state.event.booths.find((b) => b.id === booth.id);
-        if (local) Object.assign(local, booth);
+        let saved = booth;
+        if ((booth.zoneId || null) !== selectedZoneId) saved = await moveBoothToZone(booth, selectedZoneId);
+        const local = state.event.booths.find((b) => b.id === saved.id);
+        if (local) Object.assign(local, saved);
       } else {
+        const viewSize = { wPct, hPct };
         const { booth } = await api(`/api/events/${state.event.id}/booths`, {
           method: 'POST',
           body: JSON.stringify({
@@ -1396,13 +1527,13 @@
             corpNumber,
             onboardingContact,
             van,
-            zoneId: state.activeZoneId,
-            ...state.pendingAddPct,
+            equipmentMemo,
+            ...planBoothPlacement(state.pendingAddPct, viewSize, selectedZoneId),
           }),
         });
         state.event.booths.push(booth);
         if (state.mode === 'add') {
-          state.addSettings = { number: booth.number, wPct: booth.wPct, hPct: booth.hPct };
+          state.addSettings = { number: booth.number, ...viewSize };
           updateAddModeHint();
         }
       }

@@ -184,7 +184,7 @@
 
   // 부스번호/상호/사업자번호로 검색해 고를 수 있도록 datalist 옵션을 만든다.
   function boothSearchLabel(b) {
-    const parts = [b.number];
+    const parts = [window.MapRender.boothLabel(b, state.event.zones)];
     if (b.storeName) parts.push(b.storeName);
     if (b.businessNumber) parts.push(b.businessNumber);
     return parts.join(' · ');
@@ -1035,7 +1035,7 @@
       el.activeAsList.innerHTML = pending
         .map(
           (b) =>
-            `<button type="button" class="active-as-chip" data-booth-id="${b.id}">${escapeHtml(b.number)}${b.storeName ? ' · ' + escapeHtml(b.storeName) : ''}</button>`
+            `<button type="button" class="active-as-chip" data-booth-id="${b.id}">${escapeHtml(window.MapRender.boothLabel(b, state.event.zones))}${b.storeName ? ' · ' + escapeHtml(b.storeName) : ''}</button>`
         )
         .join('');
       el.activeAsList.querySelectorAll('.active-as-chip').forEach((btn) => {
@@ -1112,7 +1112,7 @@
     el.installBoothChecklist.innerHTML = booths
       .map(
         (b) =>
-          `<label><input type="checkbox" class="install-booth-check" value="${b.id}" />${escapeHtml(b.number)}${
+          `<label><input type="checkbox" class="install-booth-check" value="${b.id}" />${escapeHtml(window.MapRender.boothLabel(b, state.event.zones))}${
             statusLabel(b.installStatus) ? `<span class="install-status-tag">${statusLabel(b.installStatus)}</span>` : ''
           }</label>`
       )
@@ -1206,7 +1206,7 @@
     const markerEl = state.markers.get(boothId);
     const rect = markerEl.getBoundingClientRect();
 
-    el.popoverTitle.textContent = `부스 ${booth.number}`;
+    el.popoverTitle.textContent = `부스 ${window.MapRender.boothLabel(booth, state.event.zones)}`;
 
     const infoRows = [
       ['매장명', booth.storeName],
@@ -1214,6 +1214,7 @@
       ['고유번호', booth.corpNumber],
       ['연락처', booth.onboardingContact],
       ['VAN', booth.van],
+      ['장비 수량', booth.equipmentMemo],
     ].filter(([, v]) => v);
     el.popoverStoreInfo.innerHTML = infoRows.length
       ? infoRows

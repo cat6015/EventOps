@@ -258,7 +258,7 @@ router.post('/events/:id/booths', requireAdmin, (req, res) => {
   const event = store.getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
 
-  const { number, xPct, yPct, wPct, hPct, zoneId, storeName, businessNumber, corpNumber, onboardingContact, van } =
+  const { number, xPct, yPct, wPct, hPct, zoneId, storeName, businessNumber, corpNumber, onboardingContact, van, equipmentMemo } =
     req.body || {};
   if (!number || !String(number).trim()) {
     return res.status(400).json({ error: '부스 번호를 입력해주세요.' });
@@ -289,6 +289,7 @@ router.post('/events/:id/booths', requireAdmin, (req, res) => {
     corpNumber: corpNumber !== undefined ? String(corpNumber).trim() : undefined,
     onboardingContact: onboardingContact !== undefined ? String(onboardingContact).trim() : undefined,
     van: van !== undefined ? String(van).trim() : undefined,
+    equipmentMemo: equipmentMemo !== undefined ? String(equipmentMemo).trim() : undefined,
   });
   res.json({ ok: true, booth });
 });
@@ -365,12 +366,15 @@ router.patch('/events/:id/booths/bulk', requireAdmin, (req, res) => {
     if (!isValidSize(item.wPct) || !isValidSize(item.hPct)) {
       return res.status(400).json({ error: '부스 크기 값이 올바르지 않습니다.' });
     }
+    if (item.rotation !== undefined && (typeof item.rotation !== 'number' || !Number.isFinite(item.rotation))) {
+      return res.status(400).json({ error: '회전 각도 값이 올바르지 않습니다.' });
+    }
   }
 
   try {
     const updated = store.updateBoothsBulk(
       event.id,
-      items.map((i) => ({ id: i.id, xPct: i.xPct, yPct: i.yPct, wPct: i.wPct, hPct: i.hPct }))
+      items.map((i) => ({ id: i.id, xPct: i.xPct, yPct: i.yPct, wPct: i.wPct, hPct: i.hPct, rotation: i.rotation }))
     );
     res.json({ ok: true, booths: updated });
   } catch (err) {
@@ -462,7 +466,7 @@ router.patch('/events/:id/booths/:boothId', requireAdmin, (req, res) => {
   const booth = event.booths.find((b) => b.id === req.params.boothId);
   if (!booth) return res.status(404).json({ error: '부스를 찾을 수 없습니다.' });
 
-  const { number, xPct, yPct, wPct, hPct, storeName, businessNumber, corpNumber, onboardingContact, van } =
+  const { number, xPct, yPct, wPct, hPct, storeName, businessNumber, corpNumber, onboardingContact, van, equipmentMemo } =
     req.body || {};
   if (number !== undefined) {
     const trimmed = String(number).trim();
@@ -492,6 +496,7 @@ router.patch('/events/:id/booths/:boothId', requireAdmin, (req, res) => {
     corpNumber: corpNumber !== undefined ? String(corpNumber).trim() : undefined,
     onboardingContact: onboardingContact !== undefined ? String(onboardingContact).trim() : undefined,
     van: van !== undefined ? String(van).trim() : undefined,
+    equipmentMemo: equipmentMemo !== undefined ? String(equipmentMemo).trim() : undefined,
   });
   res.json({ ok: true, booth: updated });
 });

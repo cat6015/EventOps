@@ -194,6 +194,8 @@ function withDefaults(event) {
     if (b.hPct === undefined || b.hPct === null) b.hPct = DEFAULT_BOOTH_HEIGHT_PCT;
     if (b.storeName === undefined) b.storeName = null;
     if (b.van === undefined) b.van = null;
+    if (b.equipmentMemo === undefined) b.equipmentMemo = null;
+    if (b.rotation === undefined) b.rotation = 0;
     if (b.installStatus === undefined) b.installStatus = null;
   }
   return event;
@@ -360,7 +362,7 @@ function setEntrance(id, { xPct, yPct }) {
 // zoneId가 있으면 xPct/yPct는 "그 구역 상세 배치도 위" 좌표(zoneXPct/zoneYPct)로 저장하고,
 // 전체 배치도 위 좌표(xPct/yPct)는 구역의 rect를 이용해 자동으로 계산한다.
 // zoneId가 없으면(일반 소규모 행사) 기존처럼 xPct/yPct를 전체 배치도 좌표로 그대로 쓴다.
-function addBooth(eventId, { id, number, xPct, yPct, wPct, hPct, zoneId, storeName, businessNumber, corpNumber, onboardingContact, van }) {
+function addBooth(eventId, { id, number, xPct, yPct, wPct, hPct, zoneId, storeName, businessNumber, corpNumber, onboardingContact, van, equipmentMemo }) {
   const event = getEvent(eventId);
   if (!event) return null;
   const now = new Date().toISOString();
@@ -396,6 +398,7 @@ function addBooth(eventId, { id, number, xPct, yPct, wPct, hPct, zoneId, storeNa
     corpNumber: corpNumber || null,
     onboardingContact: onboardingContact || null,
     van: van || null,
+    equipmentMemo: equipmentMemo || null,
     createdAt: now,
     updatedAt: now,
   };
@@ -493,7 +496,7 @@ function setBoothInstallStatus(eventId, boothId, installStatus) {
 
 // 부스가 구역에 속해 있으면(booth.zoneId) 넘어온 xPct/yPct를 구역 상세 배치도 좌표로 보고
 // zoneXPct/zoneYPct에 저장한 뒤, 전체 배치도 좌표(xPct/yPct)를 구역 rect 기준으로 재계산한다.
-function updateBooth(eventId, boothId, { number, xPct, yPct, wPct, hPct, storeName, businessNumber, corpNumber, onboardingContact, van }) {
+function updateBooth(eventId, boothId, { number, xPct, yPct, wPct, hPct, storeName, businessNumber, corpNumber, onboardingContact, van, equipmentMemo }) {
   const event = getEvent(eventId);
   if (!event) return null;
   const booth = event.booths.find((b) => b.id === boothId);
@@ -521,13 +524,14 @@ function updateBooth(eventId, boothId, { number, xPct, yPct, wPct, hPct, storeNa
   if (corpNumber !== undefined) booth.corpNumber = corpNumber || null;
   if (onboardingContact !== undefined) booth.onboardingContact = onboardingContact || null;
   if (van !== undefined) booth.van = van || null;
+  if (equipmentMemo !== undefined) booth.equipmentMemo = equipmentMemo || null;
   booth.updatedAt = new Date().toISOString();
   saveEvent(event);
   return booth;
 }
 
 // 다중 선택한 부스를 한 번에 이동/크기 변경(일괄 변경)한다.
-// items: [{ id, xPct?, yPct?, wPct?, hPct? }, ...] — 각 부스가 구역에 속해 있으면
+// items: [{ id, xPct?, yPct?, wPct?, hPct?, rotation? }, ...] — 각 부스가 구역에 속해 있으면
 // xPct/yPct는 그 구역 상세 배치도 좌표로 취급하고 전체 배치도 좌표는 자동 재계산한다.
 function updateBoothsBulk(eventId, items) {
   const event = getEvent(eventId);
@@ -552,6 +556,7 @@ function updateBoothsBulk(eventId, items) {
     if (item.wPct !== undefined) booth.wPct = item.wPct;
     if (item.hPct !== undefined) booth.hPct = item.hPct;
     if (item.wPct !== undefined || item.hPct !== undefined) booth.sizeNormalized = true;
+    if (item.rotation !== undefined) booth.rotation = ((item.rotation % 360) + 360) % 360;
     booth.updatedAt = new Date().toISOString();
     updated.push(booth);
   }
@@ -639,6 +644,7 @@ function upsertBoothByNumber(eventId, { number, storeName, businessNumber, corpN
     corpNumber: corpNumber || null,
     onboardingContact: onboardingContact || null,
     van: van || null,
+    equipmentMemo: equipmentMemo || null,
     createdAt: now,
     updatedAt: now,
   };

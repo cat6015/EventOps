@@ -59,6 +59,50 @@ function boothMarkerMetrics(w, h) {
   };
 }
 
+// 오버레이는 preserveAspectRatio="none"이라 가로/세로 단위 길이가 화면에서 서로 다르다.
+// 그냥 rotate()하면 배치도가 정사각형이 아닐 때 부스가 찌그러져 보이므로, 화면 비율(k)로
+// 가로를 늘린 공간에서 회전한 뒤 다시 되돌려 "화면 기준"으로 반듯하게 회전시킨다.
+function overlayAspect(svg) {
+  const r = svg ? svg.getBoundingClientRect() : null;
+  return r && r.width > 0 && r.height > 0 ? r.width / r.height : 1;
+}
+
+function rotationTransform(k, deg) {
+  return `scale(${1 / k}, 1) rotate(${deg}) scale(${k}, 1)`;
+}
+
+function applyBoothTransform(markerEl) {
+  const x = markerEl.dataset.x;
+  const y = markerEl.dataset.y;
+  const deg = Number(markerEl.dataset.rotation) || 0;
+  if (!deg) {
+    markerEl.setAttribute('transform', `translate(${x}, ${y})`);
+    const text = markerEl.querySelector('text');
+    if (text) text.removeAttribute('transform');
+    return;
+  }
+  const k = overlayAspect(markerEl.ownerSVGElement);
+  markerEl.setAttribute('transform', `translate(${x}, ${y}) ${rotationTransform(k, deg)}`);
+  // 부스 번호는 회전과 상관없이 항상 똑바로 읽히도록 반대로 돌려 둔다.
+  const text = markerEl.querySelector('text');
+  if (text) text.setAttribute('transform', rotationTransform(k, -deg));
+}
+
+// 화면 크기/비율이 바뀌면(배치도 이미지 로드, 창 크기 변경 등) 회전 보정값을 다시 계산한다.
+const watchedOverlays = new WeakSet();
+function watchOverlayAspect(svg) {
+  if (watchedOverlays.has(svg) || typeof ResizeObserver === 'undefined') return;
+  watchedOverlays.add(svg);
+  new ResizeObserver(() => {
+    svg.querySelectorAll('.booth-marker[data-rotation]').forEach(applyBoothTransform);
+  }).observe(svg);
+}
+
+function normalizeRotation(deg) {
+  const n = Number(deg) || 0;
+  return ((n % 360) + 360) % 360;
+}
+
 function renderBoothMarker(svg, booth, { editable = false } = {}) {
   const w = booth.wPct || DEFAULT_BOOTH_W;
   const h = booth.hPct || DEFAULT_BOOTH_H;
@@ -66,8 +110,12 @@ function renderBoothMarker(svg, booth, { editable = false } = {}) {
   const g = svgEl('g', {
     class: editable ? 'booth-marker editor-mode' : 'booth-marker',
     'data-booth-id': booth.id,
+    'data-x': booth.xPct,
+    'data-y': booth.yPct,
     transform: `translate(${booth.xPct}, ${booth.yPct})`,
   });
+  const rotation = normalizeRotation(booth.rotation);
+  if (rotation) g.setAttribute('data-rotation', rotation);
   g.appendChild(
     svgEl('rect', { class: 'ring', x: -w / 2, y: -h / 2, width: w, height: h, rx, 'stroke-width': ringStrokeWidth })
   );
@@ -78,6 +126,10 @@ function renderBoothMarker(svg, booth, { editable = false } = {}) {
   text.textContent = booth.number;
   g.appendChild(text);
   svg.appendChild(g);
+  if (rotation) {
+    applyBoothTransform(g);
+    watchOverlayAspect(svg);
+  }
   return g;
 }
 
@@ -230,8 +282,25 @@ function renderOverview(svg, event, { editable = false } = {}) {
   return { boothMarkers, zoneMarkers };
 }
 
+// 구역에 속한 부스는 "구역명-번호"(예: 로컬-1)로 표시한다. 지도 위 마커는 공간이 좁아 번호만 쓴다.
+function boothLabel(booth, zones) {
+  if (!booth) return '';
+  const zone = booth.zoneId && zones ? zones.find((z) => z.id === booth.zoneId) : null;
+  return zone ? `${zone.name}-${booth.number}` : String(booth.number);
+}
+
 function setBoothMarkerPosition(markerEl, xPct, yPct) {
-  markerEl.setAttribute('transform', `translate(${xPct}, ${yPct})`);
+  markerEl.dataset.x = xPct;
+  markerEl.dataset.y = yPct;
+  applyBoothTransform(markerEl);
+}
+
+function setBoothMarkerRotation(markerEl, deg) {
+  const rotation = normalizeRotation(deg);
+  if (rotation) markerEl.dataset.rotation = rotation;
+  else delete markerEl.dataset.rotation;
+  applyBoothTransform(markerEl);
+  if (rotation) watchOverlayAspect(markerEl.ownerSVGElement);
 }
 
 function setBoothMarkerSize(markerEl, wPct, hPct) {
@@ -308,6 +377,7 @@ function pointToPct(containerEl, clientX, clientY) {
 
 window.MapRender = {
   overviewBoothSize,
+  boothLabel,
   expandRectForPreview,
   renderBase,
   renderOverview,
@@ -315,6 +385,8 @@ window.MapRender = {
   renderBoothMarker,
   renderZoneHotspot,
   setBoothMarkerPosition,
+  setBoothMarkerRotation,
+  normalizeRotation,
   setBoothMarkerSize,
   setBoothMarkerSelected,
   setBoothAlertState,
