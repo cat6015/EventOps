@@ -403,6 +403,7 @@
   padding: 2px 0;
 }
 .issue-popover .store-info-label { color: #6b7280; flex-shrink: 0; }
+.issue-popover .popover-store-name { display: block; margin-top: 2px; font-size: 0.85rem; font-weight: 600; color: #374151; }
 /* 장비 수량 메모처럼 여러 줄로 적은 값은 줄바꿈을 그대로 보여준다 */
 .issue-popover .store-info-row span:last-child { white-space: pre-wrap; text-align: right; }
 .issue-popover .open-alert-item {

@@ -1206,7 +1206,10 @@
     const markerEl = state.markers.get(boothId);
     const rect = markerEl.getBoundingClientRect();
 
-    el.popoverTitle.textContent = `부스 ${window.MapRender.boothLabel(booth, state.event.zones)}`;
+    // 부스 번호만으로는 어느 매장인지 알기 어려우므로 매장명을 제목 아래에 함께 보여준다.
+    el.popoverTitle.innerHTML =
+      `부스 ${escapeHtml(window.MapRender.boothLabel(booth, state.event.zones))}` +
+      (booth.storeName ? `<span class="popover-store-name">${escapeHtml(booth.storeName)}</span>` : '');
 
     const infoRows = [
       ['매장명', booth.storeName],
