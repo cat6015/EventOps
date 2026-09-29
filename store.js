@@ -184,7 +184,19 @@ function withDefaults(event) {
   if (!event) return event;
   if (event.isDefault === undefined) event.isDefault = false;
   if (!Array.isArray(event.zones)) event.zones = [];
-  if (!Array.isArray(event.parkingLots)) event.parkingLots = [];
+  if (!Array.isArray(event.facilities)) event.facilities = [];
+  if (!Array.isArray(event.gpsPoints)) event.gpsPoints = [];
+  // 예전 형식 이관: 주차장만 따로 두던 parkingLots → 종류(type)를 가진 facilities로,
+  // 영역 하나(rect) → 여러 칸(rects)으로 맞춘다.
+  if (Array.isArray(event.parkingLots)) {
+    for (const lot of event.parkingLots) event.facilities.push({ ...lot, type: 'parking' });
+    delete event.parkingLots;
+  }
+  for (const f of event.facilities) {
+    if (!f.type) f.type = 'parking';
+    if (!Array.isArray(f.rects)) f.rects = f.rect ? [f.rect] : [];
+    delete f.rect;
+  }
   if (!Array.isArray(event.assignments)) event.assignments = [];
   if (!Array.isArray(event.onboardingLogs)) event.onboardingLogs = [];
   for (const b of event.booths) {
@@ -221,7 +233,8 @@ function createEvent({ id, name, date, createdBy }) {
     floorplanOriginalName: null,
     entrance: null,
     zones: [],
-    parkingLots: [],
+    facilities: [],
+    gpsPoints: [],
     booths: [],
     assignments: [],
     onboardingLogs: [],
@@ -314,39 +327,53 @@ function removeZone(eventId, zoneId) {
   return removed;
 }
 
-// ---- parkingLots(주차장) ----
-// 전체 배치도 위에 주차장 위치/범위를 표시하기 위한 영역. 구역과 달리 부스가 속하거나
-// 상세 배치도를 두지 않고, 이름과 영역(rect)만 가진다.
-function addParkingLot(eventId, { id, name, rect }) {
+// ---- facilities(편의시설: 주차장/흡연존) ----
+// 전체 배치도 위에 주차장·흡연존 위치/범위를 표시하기 위한 영역. 구역과 달리 부스가 속하거나
+// 상세 배치도를 두지 않고, 종류(type)·이름·영역 목록(rects)만 가진다. ㄱ자/ㄷ자처럼 꺾인
+// 곳은 사각형 여러 개를 붙여 하나로 표시한다.
+const FACILITY_TYPES = ['parking', 'smoking'];
+
+function addFacility(eventId, { id, type, name, rects }) {
   const event = getEvent(eventId);
   if (!event) return null;
   const now = new Date().toISOString();
-  const lot = { id, name, rect, createdAt: now, updatedAt: now };
-  event.parkingLots.push(lot);
+  const facility = { id, type, name, rects, createdAt: now, updatedAt: now };
+  event.facilities.push(facility);
   saveEvent(event);
-  return lot;
+  return facility;
 }
 
-function updateParkingLot(eventId, lotId, { name, rect }) {
+function updateFacility(eventId, facilityId, { name, rects }) {
   const event = getEvent(eventId);
   if (!event) return null;
-  const lot = event.parkingLots.find((p) => p.id === lotId);
-  if (!lot) return null;
-  if (name !== undefined) lot.name = name;
-  if (rect !== undefined) lot.rect = rect;
-  lot.updatedAt = new Date().toISOString();
+  const facility = event.facilities.find((f) => f.id === facilityId);
+  if (!facility) return null;
+  if (name !== undefined) facility.name = name;
+  if (rects !== undefined) facility.rects = rects;
+  facility.updatedAt = new Date().toISOString();
   saveEvent(event);
-  return lot;
+  return facility;
 }
 
-function removeParkingLot(eventId, lotId) {
+function removeFacility(eventId, facilityId) {
   const event = getEvent(eventId);
   if (!event) return null;
-  const idx = event.parkingLots.findIndex((p) => p.id === lotId);
+  const idx = event.facilities.findIndex((f) => f.id === facilityId);
   if (idx === -1) return null;
-  const [removed] = event.parkingLots.splice(idx, 1);
+  const [removed] = event.facilities.splice(idx, 1);
   saveEvent(event);
   return removed;
+}
+
+// ---- gpsPoints(GPS 기준점) ----
+// 전체 배치도 위 지점(xPct/yPct)과 그곳의 실제 GPS 좌표(lat/lng) 짝. 지도 화면의 "내 위치"
+// 표시에 쓰는 변환식을 이 점들로 만든다(public/js/geo.js). 목록 전체를 한 번에 저장한다.
+function setGpsPoints(eventId, points) {
+  const event = getEvent(eventId);
+  if (!event) return null;
+  event.gpsPoints = points;
+  saveEvent(event);
+  return event.gpsPoints;
 }
 
 function saveEvent(event) {
@@ -896,10 +923,13 @@ module.exports = {
   updateZone,
   setZoneFloorplan,
   removeZone,
-  // parking lots
-  addParkingLot,
-  updateParkingLot,
-  removeParkingLot,
+  // GPS 기준점
+  setGpsPoints,
+  // facilities (주차장/흡연존)
+  FACILITY_TYPES,
+  addFacility,
+  updateFacility,
+  removeFacility,
   // assignments
   addAssignment,
   removeAssignment,

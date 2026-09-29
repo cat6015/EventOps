@@ -177,44 +177,88 @@ function isValidRect(rect) {
   );
 }
 
-// 전체 배치도 위 주차장 표시(이름 + 드래그로 지정한 영역).
-router.post('/events/:id/parking-lots', requireAdmin, (req, res) => {
+// GPS 기준점: 전체 배치도 위 지점과 그곳의 실제 GPS 좌표 짝 목록을 통째로 저장한다.
+const MAX_GPS_POINTS = 50;
+router.put('/events/:id/gps-points', requireAdmin, (req, res) => {
   const event = store.getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
-  const { name, rect } = req.body || {};
+  const { points } = req.body || {};
+  if (!Array.isArray(points) || points.length > MAX_GPS_POINTS) {
+    return res.status(400).json({ error: `기준점은 최대 ${MAX_GPS_POINTS}개까지 저장할 수 있습니다.` });
+  }
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  for (const p of points) {
+    if (!p || ![p.xPct, p.yPct, p.lat, p.lng].every(isNum)) {
+      return res.status(400).json({ error: '기준점 값이 올바르지 않습니다.' });
+    }
+    if (p.xPct < 0 || p.xPct > 100 || p.yPct < 0 || p.yPct > 100) {
+      return res.status(400).json({ error: '기준점 위치가 배치도 범위를 벗어났습니다.' });
+    }
+    if (p.lat < -90 || p.lat > 90 || p.lng < -180 || p.lng > 180) {
+      return res.status(400).json({ error: '위도/경도 값이 올바르지 않습니다.' });
+    }
+  }
+  const saved = store.setGpsPoints(
+    event.id,
+    points.map((p) => ({
+      id: typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID(),
+      xPct: p.xPct,
+      yPct: p.yPct,
+      lat: p.lat,
+      lng: p.lng,
+    }))
+  );
+  res.json({ ok: true, gpsPoints: saved });
+});
+
+// 전체 배치도 위 편의시설(주차장/흡연존) 표시: 종류 + 이름 + 드래그로 지정한 영역들.
+// ㄱ자처럼 꺾인 곳은 사각형 여러 개(rects)로 표현한다.
+const MAX_FACILITY_RECTS = 20;
+const FACILITY_LABELS = { parking: '주차장', smoking: '흡연존' };
+function isValidFacilityRects(rects) {
+  return Array.isArray(rects) && rects.length > 0 && rects.length <= MAX_FACILITY_RECTS && rects.every(isValidRect);
+}
+
+router.post('/events/:id/facilities', requireAdmin, (req, res) => {
+  const event = store.getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
+  const { type, name, rects } = req.body || {};
+  if (!store.FACILITY_TYPES.includes(type)) {
+    return res.status(400).json({ error: '종류가 올바르지 않습니다.' });
+  }
   if (!name || !String(name).trim()) {
-    return res.status(400).json({ error: '주차장 이름을 입력해주세요.' });
+    return res.status(400).json({ error: `${FACILITY_LABELS[type]} 이름을 입력해주세요.` });
   }
-  if (!isValidRect(rect)) {
-    return res.status(400).json({ error: '주차장 영역 값이 올바르지 않습니다.' });
+  if (!isValidFacilityRects(rects)) {
+    return res.status(400).json({ error: '영역 값이 올바르지 않습니다.' });
   }
-  const lot = store.addParkingLot(event.id, { id: crypto.randomUUID(), name: String(name).trim(), rect });
-  res.json({ ok: true, parkingLot: lot });
+  const facility = store.addFacility(event.id, { id: crypto.randomUUID(), type, name: String(name).trim(), rects });
+  res.json({ ok: true, facility });
 });
 
-router.patch('/events/:id/parking-lots/:lotId', requireAdmin, (req, res) => {
+router.patch('/events/:id/facilities/:facilityId', requireAdmin, (req, res) => {
   const event = store.getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
-  const { name, rect } = req.body || {};
+  const { name, rects } = req.body || {};
   if (name !== undefined && !String(name).trim()) {
-    return res.status(400).json({ error: '주차장 이름을 입력해주세요.' });
+    return res.status(400).json({ error: '이름을 입력해주세요.' });
   }
-  if (rect !== undefined && !isValidRect(rect)) {
-    return res.status(400).json({ error: '주차장 영역 값이 올바르지 않습니다.' });
+  if (rects !== undefined && !isValidFacilityRects(rects)) {
+    return res.status(400).json({ error: `영역 값이 올바르지 않습니다(영역은 1~${MAX_FACILITY_RECTS}개).` });
   }
-  const lot = store.updateParkingLot(event.id, req.params.lotId, {
+  const facility = store.updateFacility(event.id, req.params.facilityId, {
     name: name !== undefined ? String(name).trim() : undefined,
-    rect,
+    rects,
   });
-  if (!lot) return res.status(404).json({ error: '주차장을 찾을 수 없습니다.' });
-  res.json({ ok: true, parkingLot: lot });
+  if (!facility) return res.status(404).json({ error: '항목을 찾을 수 없습니다.' });
+  res.json({ ok: true, facility });
 });
 
-router.delete('/events/:id/parking-lots/:lotId', requireAdmin, (req, res) => {
+router.delete('/events/:id/facilities/:facilityId', requireAdmin, (req, res) => {
   const event = store.getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
-  const removed = store.removeParkingLot(event.id, req.params.lotId);
-  if (!removed) return res.status(404).json({ error: '주차장을 찾을 수 없습니다.' });
+  const removed = store.removeFacility(event.id, req.params.facilityId);
+  if (!removed) return res.status(404).json({ error: '항목을 찾을 수 없습니다.' });
   res.json({ ok: true });
 });
 

@@ -156,18 +156,66 @@
   outline-offset: -1px;
 }
 
+/* ---- GPS: 편집기 기준점 핀 / 지도 화면 내 위치 ---- */
+.gps-pin-layer, .gps-layer { position: absolute; inset: 0; pointer-events: none; line-height: normal; }
+.gps-pin {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid white;
+  background: #2563eb;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%) scale(var(--inv-zoom, 1));
+  pointer-events: none;
+}
+.gps-pin-layer.editing .gps-pin { pointer-events: auto; cursor: pointer; }
+.gps-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #dbe4f0; border-radius: 8px; background: #f8fafc; }
+.gps-panel .gps-row-warn td { color: #b91c1c; font-weight: 600; }
+.my-location-accuracy {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(37, 99, 235, 0.45);
+  transform: translate(-50%, -50%);
+}
+.my-location-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid white;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%) scale(var(--inv-zoom, 1));
+  animation: my-location-pulse 1.6s ease-out infinite;
+}
+@keyframes my-location-pulse {
+  0% { box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.45), 0 1px 4px rgba(0, 0, 0, 0.4); }
+  100% { box-shadow: 0 0 0 14px rgba(37, 99, 235, 0), 0 1px 4px rgba(0, 0, 0, 0.4); }
+}
+#my-location-btn.active { background: #2563eb; color: white; }
+/* 버튼이 늘어나 좁은 휴대폰 화면에서 넘치지 않도록 줄바꿈을 허용한다 */
+.zoom-toolbar { flex-wrap: wrap; }
+.my-location-status { font-size: 0.8rem; color: #2563eb; }
+.my-location-status.error { color: #b91c1c; }
+
 .zoom-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .zoom-toolbar .zoom-level { font-size: 0.85rem; color: #6b7280; min-width: 48px; text-align: center; }
 
-/* 주차장: 구역(색색의 점선)과 구분되도록 회색 계열 실선 + 옅은 사선 느낌의 채움 */
-.parking-lot rect {
-  fill: #64748b;
-  fill-opacity: 0.22;
-  stroke: #475569;
-  stroke-width: 0.35;
-}
-.parking-lot text {
-  fill: #1e293b;
+/* 편의시설(주차장/흡연존): 구역(색색의 점선)과 구분되도록 종류별 고정 색의 실선 영역 */
+.facility { --facility-color: #475569; --facility-fill: #64748b; --facility-text: #1e293b; }
+.facility--smoking { --facility-color: #9a3412; --facility-fill: #c2410c; --facility-text: #7c2d12; }
+.facility .facility-fill { opacity: 0.22; }
+.facility .facility-fill rect { fill: var(--facility-fill); }
+/* 테두리는 마스크로 영역 안쪽을 가려 바깥 절반만 보이므로 두께를 두 배로 잡는다 */
+.facility .facility-outline rect { fill: none; stroke: var(--facility-color); stroke-width: 0.7; }
+.facility text {
+  fill: var(--facility-text);
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: central;
@@ -177,11 +225,23 @@
   stroke-linejoin: round;
   pointer-events: none;
 }
-/* 지도 화면에서는 주차장이 클릭을 가로채지 않게 하고, 편집기에서만 눌러서 수정할 수 있게 한다 */
-.parking-lot { pointer-events: none; }
-.parking-lot.editable { pointer-events: auto; cursor: pointer; }
-.parking-lot.editable:hover rect { fill-opacity: 0.35; }
-.map-overlay.parking-passthrough .parking-lot.editable { pointer-events: none; }
+.facility { pointer-events: none; }
+/* 지도 화면: 누르면 같은 종류(주차장/흡연존) 위치가 모두 깜빡인다 */
+.facility.clickable { pointer-events: auto; cursor: pointer; }
+/* 편집기: 선택/이동 모드에서 눌러서 이름 변경/영역 수정/삭제 */
+.facility.editable { pointer-events: auto; cursor: pointer; }
+.facility.editable:hover .facility-fill { opacity: 0.35; }
+.map-overlay.facility-passthrough .facility.editable { pointer-events: none; }
+.facility.facility--highlight .facility-fill { animation: facility-blink-fill 0.7s ease-in-out infinite; }
+.facility.facility--highlight .facility-outline rect { animation: facility-blink-outline 0.7s ease-in-out infinite; }
+@keyframes facility-blink-fill {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.75; }
+}
+@keyframes facility-blink-outline {
+  0%, 100% { stroke-width: 0.7; }
+  50% { stroke-width: 1.6; }
+}
 
 .zone-hotspot { cursor: pointer; }
 /* 구역마다 --zone-color(map-render.js에서 지정)로 색을 달리하고, 지도 위에서도 이름이
@@ -466,6 +526,11 @@
 .legend-dot.onboarding { background: #f59e0b; }
 .legend-dot.installed { background: #1a7f37; }
 .legend-dot.parking { background: rgba(100, 116, 139, 0.45); border: 1px solid #475569; }
+.legend-dot.smoking { background: rgba(194, 65, 12, 0.4); border: 1px solid #9a3412; }
+/* 범례의 주차장/흡연존은 눌러서 지도 위 위치를 깜빡여 볼 수 있다 */
+.legend .legend-facility { cursor: pointer; border-radius: 4px; padding: 1px 4px; }
+.legend .legend-facility:hover { background: #eef2f7; }
+.legend .legend-facility.active { background: #fde68a; font-weight: 700; }
 .legend-dot.alert { background: #dc2626; }
 
 .event-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }

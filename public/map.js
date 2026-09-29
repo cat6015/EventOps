@@ -28,7 +28,12 @@
     locatedBoothId: null,
     popoverBoothId: null,
     // 배치도를 돌려 보는 각도(0/90/180/270) — 보는 사람마다 편한 방향이 달라 이 브라우저에만 기억한다.
-    viewRotation: loadViewRotation(), // 지금 정보 팝업이 가리키는 부스 — 줌/스크롤 시 팝업을 마커 위치로 따라 옮긴다
+    viewRotation: loadViewRotation(),
+    // 주차장/흡연존 위치를 깜빡여 보여주는 중인 종류('parking' | 'smoking' | null)
+    highlightFacilityType: null,
+    // "내 위치"(GPS) 표시: watchId가 있으면 추적 중. pos는 전체 배치도 기준 위치/정확도(m).
+    myLocation: { watchId: null, pos: null, centered: false },
+    geoTransform: null, // 이 행사의 GPS 기준점으로 만든 변환식(public/js/geo.js) — 3곳 미만이면 null // 지금 정보 팝업이 가리키는 부스 — 줌/스크롤 시 팝업을 마커 위치로 따라 옮긴다
   };
 
   const el = {
@@ -54,6 +59,9 @@
     zoomResetBtn: document.getElementById('zoom-reset-btn'),
     zoomLevel: document.getElementById('zoom-level'),
     viewRotateBtn: document.getElementById('view-rotate-btn'),
+    myLocationBtn: document.getElementById('my-location-btn'),
+    myLocationStatus: document.getElementById('my-location-status'),
+    gpsLayer: document.getElementById('gps-layer'),
     reportBoothSearch: document.getElementById('report-booth-search'),
     reportBoothDatalist: document.getElementById('report-booth-datalist'),
     boothLocateSearch: document.getElementById('booth-locate-search'),
@@ -180,6 +188,9 @@
   async function loadEventDetail(eventId) {
     const event = await api(`/api/events/${eventId}`);
     state.event = event;
+    stopMyLocation();
+    state.geoTransform = window.GeoRef.buildTransform(event.gpsPoints || []);
+    el.myLocationBtn.hidden = !state.geoTransform;
 
     renderReportBoothOptions();
 
@@ -393,6 +404,8 @@
       180: [z * w, z * h],
       270: [0, z * w],
     }[state.viewRotation] || [0, 0];
+    // "내 위치" 점은 확대해도 같은 크기로 보이도록 배율만큼 거꾸로 줄인다.
+    el.mapCanvas.style.setProperty('--inv-zoom', 1 / z);
     el.mapCanvas.style.transform = state.viewRotation
       ? `translate(${shift[0]}px, ${shift[1]}px) rotate(${state.viewRotation}deg) scale(${z})`
       : `scale(${z})`;
@@ -772,6 +785,8 @@
     }
     applyAlertsToMap();
     applyLocatedSparkle();
+    attachFacilityHandlers();
+    renderMyLocation();
     // 구역 탭에 다녀오는 등으로 전체 배치도가 다시 그려지면, 찾아간 부스의 정보 팝업을 다시 띄운다.
     if (state.locatedBoothId && !state.activeZoneId && state.markers.has(state.locatedBoothId)) {
       const boothId = state.locatedBoothId;
@@ -780,6 +795,152 @@
       });
     }
   }
+
+  // ---- 내 위치(GPS) ----
+  // 배치도 관리에서 찍어 둔 GPS 기준점(3곳 이상)으로 휴대폰 GPS 좌표를 배치도 위치로 바꿔
+  // 파란 점 + 오차 범위로 보여준다. 야외에서 휴대폰 GPS 오차는 보통 5~10m라 "대략 이 근처" 용도다.
+  function setMyLocationStatus(text, isError) {
+    el.myLocationStatus.textContent = text || '';
+    el.myLocationStatus.classList.toggle('error', !!isError);
+  }
+
+  function stopMyLocation() {
+    if (state.myLocation.watchId !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(state.myLocation.watchId);
+    }
+    state.myLocation = { watchId: null, pos: null, centered: false };
+    el.myLocationBtn.classList.remove('active');
+    el.gpsLayer.innerHTML = '';
+    setMyLocationStatus('');
+  }
+
+  function startMyLocation() {
+    if (!window.isSecureContext) {
+      setMyLocationStatus('위치는 HTTPS 주소에서만 사용할 수 있습니다.', true);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setMyLocationStatus('이 브라우저는 위치 기능을 지원하지 않습니다.', true);
+      return;
+    }
+    el.myLocationBtn.classList.add('active');
+    setMyLocationStatus('위치 찾는 중…');
+    state.myLocation.watchId = navigator.geolocation.watchPosition(onMyPosition, onMyPositionError, {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 20000,
+    });
+  }
+
+  function onMyPosition(position) {
+    if (!state.geoTransform) return;
+    const { latitude, longitude, accuracy } = position.coords;
+    const pct = state.geoTransform.toPct(latitude, longitude);
+    const outside = pct.xPct < 0 || pct.xPct > 100 || pct.yPct < 0 || pct.yPct > 100;
+    state.myLocation.pos = { ...pct, accM: accuracy, outside };
+    setMyLocationStatus(outside ? '지금 위치가 배치도 범위 밖입니다.' : `정확도 약 ±${Math.round(accuracy)}m`, outside);
+    // 처음 위치를 잡으면 전체 배치도에서 내 위치로 화면을 옮긴다(이후엔 사용자가 보는 화면을 건드리지 않음).
+    if (!state.myLocation.centered && !outside) {
+      state.myLocation.centered = true;
+      if (state.activeZoneId || state.onboardingFilterOn) switchZoneTab(null);
+      renderMyLocation();
+      afterMapReady(() => {
+        const dot = el.gpsLayer.querySelector('.my-location-dot');
+        if (dot) centerOnMarker(dot, LOCATE_ZOOM);
+      });
+      return;
+    }
+    renderMyLocation();
+  }
+
+  function onMyPositionError(err) {
+    if (err.code === 1) {
+      stopMyLocation();
+      setMyLocationStatus('위치 권한이 거부되었습니다. 브라우저 설정에서 이 사이트의 위치 권한을 허용해주세요.', true);
+    } else if (!state.myLocation.pos) {
+      setMyLocationStatus(err.code === 3 ? '위치를 찾는 데 시간이 걸리고 있습니다…' : '위치를 찾을 수 없습니다.', true);
+    }
+  }
+
+  // 점과 오차 범위는 배치도 위 HTML 요소로 그린다(SVG 오버레이는 가로세로 비율이 늘어나 원이 찌그러지므로).
+  // 구역 탭에서는 그 구역 영역 안에 있을 때만 구역 화면 좌표로 바꿔서 보여준다.
+  function renderMyLocation() {
+    const pos = state.myLocation.pos;
+    // 레이어를 SVG 오버레이와 같은 자리/크기로 맞춘다(구역 잘라 보기에서는 오버레이가 캔버스 일부만 차지).
+    ['left', 'top', 'width', 'height', 'right', 'bottom'].forEach((k) => {
+      el.gpsLayer.style[k] = el.mapOverlay.style[k];
+    });
+    el.gpsLayer.hidden = el.mapOverlay.hidden;
+    if (!pos || pos.outside || !state.geoTransform) {
+      el.gpsLayer.innerHTML = '';
+      return;
+    }
+    let x = pos.xPct;
+    let y = pos.yPct;
+    let scaleX = 1;
+    let scaleY = 1;
+    const zone = getActiveZone();
+    if (zone) {
+      if (!zone.rect) {
+        el.gpsLayer.innerHTML = '';
+        return;
+      }
+      x = ((pos.xPct - zone.rect.xPct) / zone.rect.wPct) * 100;
+      y = ((pos.yPct - zone.rect.yPct) / zone.rect.hPct) * 100;
+      scaleX = 100 / zone.rect.wPct;
+      scaleY = 100 / zone.rect.hPct;
+      if (x < 0 || x > 100 || y < 0 || y > 100) {
+        el.gpsLayer.innerHTML = '';
+        return;
+      }
+    }
+    const { pctPerMeter } = state.geoTransform;
+    const accW = 2 * pos.accM * pctPerMeter.x * scaleX;
+    const accH = 2 * pos.accM * pctPerMeter.y * scaleY;
+    el.gpsLayer.innerHTML =
+      `<div class="my-location-accuracy" style="left:${x}%;top:${y}%;width:${accW}%;height:${accH}%"></div>` +
+      `<div class="my-location-dot" style="left:${x}%;top:${y}%" title="내 위치"></div>`;
+  }
+
+  el.myLocationBtn.addEventListener('click', () => {
+    if (state.myLocation.watchId !== null) stopMyLocation();
+    else startMyLocation();
+  });
+
+  // ---- 편의시설(주차장/흡연존) 위치 깜빡이기 ----
+  // 지도 위 주차장/흡연존을 누르거나 범례의 "주차장"/"흡연존"을 누르면 같은 종류의 위치가
+  // 모두 깜빡인다. 같은 걸 한 번 더 누르면 끈다. 편의시설은 전체 배치도에만 있으므로
+  // 구역 탭에서 범례를 누르면 전체 배치도로 돌아가서 보여준다.
+  function attachFacilityHandlers() {
+    el.mapOverlay.querySelectorAll('.facility').forEach((g) => {
+      g.classList.add('clickable');
+      g.addEventListener('click', () => toggleFacilityHighlight(g.dataset.facilityType));
+    });
+    applyFacilityHighlight();
+  }
+
+  function applyFacilityHighlight() {
+    const type = state.highlightFacilityType;
+    el.mapOverlay.querySelectorAll('.facility').forEach((g) => {
+      g.classList.toggle('facility--highlight', !!type && g.dataset.facilityType === type);
+    });
+    document.querySelectorAll('.legend-facility').forEach((item) => {
+      item.classList.toggle('active', !!type && item.dataset.facilityType === type);
+    });
+  }
+
+  function toggleFacilityHighlight(type) {
+    state.highlightFacilityType = state.highlightFacilityType === type ? null : type;
+    if (state.highlightFacilityType && (state.activeZoneId || state.onboardingFilterOn)) {
+      switchZoneTab(null);
+      return; // switchZoneTab → renderCurrentMap에서 깜빡임을 적용한다
+    }
+    applyFacilityHighlight();
+  }
+
+  document.querySelectorAll('.legend-facility').forEach((item) => {
+    item.addEventListener('click', () => toggleFacilityHighlight(item.dataset.facilityType));
+  });
 
   // 새 A/S 등록 시 짧게 울리는 사이렌풍 알림음(외부 음원 없이 Web Audio로 합성)
   let audioCtx = null;
@@ -1390,7 +1551,7 @@
   document.addEventListener('click', (e) => {
     if (el.popover.hidden) return;
     if (el.popover.contains(e.target)) return;
-    if (e.target.closest('.booth-marker, .zoom-toolbar, .zone-tabs, .zone-hotspot, #booth-locate-search')) return;
+    if (e.target.closest('.booth-marker, .zoom-toolbar, .zone-tabs, .zone-hotspot, .facility, .legend-facility, #booth-locate-search')) return;
     dismissPopover();
   });
 

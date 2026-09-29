@@ -12,9 +12,13 @@
     mode: 'select', // 'select' | 'add' | 'grid' | 'zone' | 'entrance'
     activeZoneId: null, // null = 전체 배치도 탭
     editingZoneId: null, // 구역 영역을 재설정하는 중이면 그 구역 id
-    editingParkingId: null, // 주차장 영역을 다시 지정하는 중이면 그 주차장 id
-    modalParkingId: null, // 주차장 모달이 수정 중인 주차장 id(새로 만들 때는 null)
-    pendingParkingRect: null,
+    gpsModalPointId: null, // GPS 기준점 모달이 수정 중인 기준점 id(새로 만들 때는 null)
+    gpsPendingPct: null, // 새 GPS 기준점을 찍은 배치도 위치
+    facilityType: 'parking', // 편의시설 추가 모드에서 만들 종류: 'parking'(주차장) | 'smoking'(흡연존)
+    editingFacilityId: null, // 편의시설 영역을 다시 지정하거나 영역을 추가하는 중이면 그 id
+    facilityDrawMode: null, // editingFacilityId가 있을 때: 'replace'(다시 지정) | 'add'(영역 추가)
+    modalFacilityId: null, // 편의시설 모달이 수정 중인 id(새로 만들 때는 null)
+    pendingFacilityRect: null,
     pendingAddPct: null,
     addSettings: null, // 부스추가 모드에서 직전에 저장한 번호/크기(모드를 끄기 전까지 유지)
     pendingGridRect: null,
@@ -61,14 +65,30 @@
     modeGridBtn: document.getElementById('mode-grid-btn'),
     modeZoneBtn: document.getElementById('mode-zone-btn'),
     modeParkingBtn: document.getElementById('mode-parking-btn'),
-    parkingModal: document.getElementById('parking-modal'),
-    parkingModalTitle: document.getElementById('parking-modal-title'),
-    parkingModalName: document.getElementById('parking-modal-name'),
-    parkingModalError: document.getElementById('parking-modal-error'),
-    parkingModalDelete: document.getElementById('parking-modal-delete'),
-    parkingModalResize: document.getElementById('parking-modal-resize'),
-    parkingModalCancel: document.getElementById('parking-modal-cancel'),
-    parkingModalSave: document.getElementById('parking-modal-save'),
+    modeSmokingBtn: document.getElementById('mode-smoking-btn'),
+    modeGpsBtn: document.getElementById('mode-gps-btn'),
+    gpsPinLayer: document.getElementById('gps-pin-layer'),
+    gpsPanel: document.getElementById('gps-panel'),
+    gpsSummary: document.getElementById('gps-summary'),
+    gpsListBody: document.getElementById('gps-list-body'),
+    gpsModal: document.getElementById('gps-modal'),
+    gpsModalTitle: document.getElementById('gps-modal-title'),
+    gpsModalLatLng: document.getElementById('gps-modal-latlng'),
+    gpsModalError: document.getElementById('gps-modal-error'),
+    gpsModalDelete: document.getElementById('gps-modal-delete'),
+    gpsModalCancel: document.getElementById('gps-modal-cancel'),
+    gpsModalSave: document.getElementById('gps-modal-save'),
+    facilityModal: document.getElementById('facility-modal'),
+    facilityModalTitle: document.getElementById('facility-modal-title'),
+    facilityModalNameLabel: document.getElementById('facility-modal-name-label'),
+    facilityModalName: document.getElementById('facility-modal-name'),
+    facilityModalError: document.getElementById('facility-modal-error'),
+    facilityModalDelete: document.getElementById('facility-modal-delete'),
+    facilityModalResize: document.getElementById('facility-modal-resize'),
+    facilityModalAddArea: document.getElementById('facility-modal-add-area'),
+    facilityModalAreas: document.getElementById('facility-modal-areas'),
+    facilityModalCancel: document.getElementById('facility-modal-cancel'),
+    facilityModalSave: document.getElementById('facility-modal-save'),
     modeEntranceBtn: document.getElementById('mode-entrance-btn'),
     modeHint: document.getElementById('mode-hint'),
     zoomInBtn: document.getElementById('zoom-in-btn'),
@@ -511,8 +531,10 @@
     el.mapEditorArea.hidden = false;
     el.modeZoneBtn.hidden = !!zone;
     el.modeParkingBtn.hidden = !!zone;
+    el.modeSmokingBtn.hidden = !!zone;
+    el.modeGpsBtn.hidden = !!zone;
     el.modeEntranceBtn.hidden = !!zone;
-    if (zone && (state.mode === 'zone' || state.mode === 'entrance' || state.mode === 'parking')) setMode('select');
+    if (zone && (state.mode === 'zone' || state.mode === 'entrance' || state.mode === 'facility' || state.mode === 'gps')) setMode('select');
 
     if (!floorplanPath && !usingCropFallback) {
       clearCropFallback();
@@ -549,7 +571,8 @@
       state.markers = window.MapRender.renderBase(el.mapOverlay, state.event, { editable: true });
     }
 
-    attachParkingLotHandlers();
+    attachFacilityHandlers();
+    renderGpsPoints();
 
     const viewBoothById = new Map(state.viewBooths.map((b) => [b.id, b]));
     for (const [boothId, markerEl] of state.markers) {
@@ -596,6 +619,8 @@
   // ---- 확대/축소(줌) ----
   function applyZoom() {
     el.mapCanvas.style.transform = `scale(${state.zoom})`;
+    // GPS 기준점 핀은 확대해도 같은 크기로 보이도록 배율만큼 거꾸로 줄인다.
+    el.mapCanvas.style.setProperty('--inv-zoom', 1 / state.zoom);
     el.zoomLevel.textContent = `${Math.round(state.zoom * 100)}%`;
   }
 
@@ -643,12 +668,13 @@
   // ---- 모드 전환 ----
   function setMode(mode) {
     if (mode !== 'zone') state.editingZoneId = null;
-    if (mode !== 'parking') state.editingParkingId = null;
+    if (mode !== 'facility') state.editingFacilityId = null;
     if (mode !== 'add') state.addSettings = null;
     state.mode = mode;
-    // 선택/이동 모드가 아니면 주차장이 클릭을 가로채지 않게 한다(부스 추가/영역 드래그 등).
-    el.mapOverlay.classList.toggle('parking-passthrough', mode !== 'select');
-    [el.modeSelectBtn, el.modeAddBtn, el.modeGridBtn, el.modeZoneBtn, el.modeParkingBtn, el.modeEntranceBtn].forEach((b) =>
+    // 선택/이동 모드가 아니면 주차장/흡연존이 클릭을 가로채지 않게 한다(부스 추가/영역 드래그 등).
+    el.mapOverlay.classList.toggle('facility-passthrough', mode !== 'select');
+    el.gpsPinLayer.classList.toggle('editing', mode === 'gps');
+    [el.modeSelectBtn, el.modeAddBtn, el.modeGridBtn, el.modeZoneBtn, el.modeParkingBtn, el.modeSmokingBtn, el.modeEntranceBtn, el.modeGpsBtn].forEach((b) =>
       b.classList.remove('active')
     );
     if (mode === 'select') {
@@ -666,11 +692,18 @@
       el.modeHint.textContent = state.editingZoneId
         ? '재설정할 새 영역을 전체 배치도 위에서 드래그하세요'
         : '전체 배치도 위에서 영역을 드래그해 새 구역을 지정하세요';
-    } else if (mode === 'parking') {
-      el.modeParkingBtn.classList.add('active');
-      el.modeHint.textContent = state.editingParkingId
-        ? '주차장의 새 영역을 전체 배치도 위에서 드래그하세요'
-        : '전체 배치도 위에서 주차장 영역을 드래그하세요 · 만든 주차장은 선택/이동 모드에서 클릭해 이름 변경/삭제';
+    } else if (mode === 'gps') {
+      el.modeGpsBtn.classList.add('active');
+      el.modeHint.textContent = '배치도 위 지점을 클릭해 그곳의 GPS 좌표를 입력하세요 · 찍어 둔 기준점(파란 핀)을 클릭하면 수정/삭제';
+      renderGpsPoints();
+    } else if (mode === 'facility') {
+      const label = FACILITY_LABELS[state.facilityType];
+      (state.facilityType === 'smoking' ? el.modeSmokingBtn : el.modeParkingBtn).classList.add('active');
+      el.modeHint.textContent = state.editingFacilityId
+        ? state.facilityDrawMode === 'add'
+          ? `${label}에 붙일 영역을 전체 배치도 위에서 드래그하세요(ㄱ자면 꺾인 나머지 부분)`
+          : `${label}의 새 영역을 전체 배치도 위에서 드래그하세요`
+        : `전체 배치도 위에서 ${label} 영역을 드래그하세요 · 만든 ${label}은 선택/이동 모드에서 클릭해 이름 변경/삭제`;
     } else {
       el.modeEntranceBtn.classList.add('active');
       el.modeHint.textContent = '배치도 위에서 입구 위치를 클릭하세요';
@@ -680,8 +713,16 @@
   el.modeAddBtn.addEventListener('click', () => setMode('add'));
   el.modeGridBtn.addEventListener('click', () => setMode('grid'));
   el.modeZoneBtn.addEventListener('click', () => setMode('zone'));
-  el.modeParkingBtn.addEventListener('click', () => setMode('parking'));
+  // 주차장/흡연존은 같은 "편의시설 추가" 모드를 쓰고, 어떤 종류를 만들지만 다르다.
+  function startFacilityMode(type) {
+    state.facilityType = type;
+    state.editingFacilityId = null;
+    setMode('facility');
+  }
+  el.modeParkingBtn.addEventListener('click', () => startFacilityMode('parking'));
+  el.modeSmokingBtn.addEventListener('click', () => startFacilityMode('smoking'));
   el.modeEntranceBtn.addEventListener('click', () => setMode('entrance'));
+  el.modeGpsBtn.addEventListener('click', () => setMode('gps'));
   setMode('select');
 
   // 부스 번호 끝의 숫자를 1 증가시켜 다음 번호를 만든다(자릿수는 유지). 끝이 숫자가 아니면 null.
@@ -818,6 +859,8 @@
       } catch (err) {
         alert(err.message);
       }
+    } else if (state.mode === 'gps') {
+      openGpsModal(null, pct);
     } else if (state.mode === 'select' && !(e.shiftKey || e.ctrlKey || e.metaKey)) {
       clearSelection();
     }
@@ -871,9 +914,13 @@
       } else if (state.mode === 'zone') {
         if (state.editingZoneId) updateZoneRect(state.editingZoneId, rect);
         else openZoneModal(rect);
-      } else if (state.mode === 'parking') {
-        if (state.editingParkingId) saveParkingLot(state.editingParkingId, { rect });
-        else openParkingModal(null, rect);
+      } else if (state.mode === 'facility') {
+        if (state.editingFacilityId) {
+          const facility = findFacility(state.editingFacilityId);
+          const current = facility ? window.MapRender.facilityRects(facility) : [];
+          const rects = state.facilityDrawMode === 'add' ? [...current, rect] : [rect];
+          saveFacility(state.editingFacilityId, { rects });
+        } else openFacilityModal(null, rect);
       }
     });
   }
@@ -897,7 +944,7 @@
 
   el.mapOverlay.addEventListener('mousedown', (e) => {
     if (!state.event || !hasRenderableFloorplan()) return;
-    if (state.mode === 'grid' || state.mode === 'zone' || state.mode === 'parking') {
+    if (state.mode === 'grid' || state.mode === 'zone' || state.mode === 'facility') {
       startRegionDrag(e);
     } else if (state.mode === 'select' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       startRubberBandSelect(e);
@@ -1391,11 +1438,128 @@
     }
   });
 
-  // ---- 주차장 ----
-  // 선택/이동 모드에서 주차장을 클릭하면 이름 변경/삭제/영역 재지정 모달을 연다.
-  // 다른 모드(부스 추가 등)에서는 클릭이 그대로 배치도로 전달되어 주차장 위에도 부스를 놓을 수 있다.
-  function attachParkingLotHandlers() {
-    el.mapOverlay.querySelectorAll('.parking-lot').forEach((g) => {
+  // ---- GPS 기준점 ----
+  // 전체 배치도 위 지점 ↔ 실제 GPS 좌표 짝. 지도 화면의 "내 위치" 표시에 쓰인다(public/js/geo.js).
+  // 기준점은 전체 배치도 좌표로 저장하므로 전체 배치도 탭에서만 보여주고 편집한다.
+  function gpsPoints() {
+    return (state.event && state.event.gpsPoints) || [];
+  }
+
+  function renderGpsPoints() {
+    const onOverview = !getActiveZone();
+    const points = gpsPoints();
+    el.gpsPinLayer.hidden = !onOverview;
+    el.gpsPanel.hidden = !onOverview || (points.length === 0 && state.mode !== 'gps');
+    el.gpsPinLayer.innerHTML = points
+      .map(
+        (p, i) =>
+          `<button type="button" class="gps-pin" data-gps-id="${p.id}" style="left:${p.xPct}%;top:${p.yPct}%" title="기준점 ${i + 1}: ${p.lat}, ${p.lng}">${i + 1}</button>`
+      )
+      .join('');
+    el.gpsPinLayer.querySelectorAll('.gps-pin').forEach((pin) => {
+      pin.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.mode === 'gps') openGpsModal(pin.dataset.gpsId, null);
+      });
+    });
+
+    const transform = window.GeoRef.buildTransform(points);
+    if (points.length < 3) {
+      el.gpsSummary.textContent = `${points.length}개 · 3곳 이상 찍어야 "내 위치"를 쓸 수 있습니다.`;
+    } else if (!transform) {
+      el.gpsSummary.textContent = `${points.length}개 · 기준점이 한 줄로 늘어서 있습니다. 한 줄에서 벗어난 곳을 더 찍어주세요.`;
+    } else {
+      const avg = transform.residuals.reduce((s, r) => s + r.meters, 0) / points.length;
+      el.gpsSummary.textContent = `${points.length}개 · 사용 가능 · 평균 어긋남 약 ${avg.toFixed(1)}m`;
+    }
+    el.gpsListBody.innerHTML = points.length
+      ? points
+          .map((p, i) => {
+            const r = transform ? transform.residuals[i] : null;
+            const off = r ? `${r.meters.toFixed(1)}m` : '-';
+            return `<tr class="${r && r.meters > 15 ? 'gps-row-warn' : ''}">
+              <td>${i + 1}</td>
+              <td>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</td>
+              <td>${off}</td>
+              <td><button class="secondary gps-edit-btn" data-gps-id="${p.id}">수정</button></td>
+            </tr>`;
+          })
+          .join('')
+      : '<tr><td colspan="4" style="color:#6b7280;">아직 기준점이 없습니다. 배치도 위를 클릭해 추가하세요.</td></tr>';
+    el.gpsListBody.querySelectorAll('.gps-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openGpsModal(btn.dataset.gpsId, null));
+    });
+  }
+
+  function openGpsModal(pointId, pct) {
+    state.gpsModalPointId = pointId;
+    state.gpsPendingPct = pct;
+    const point = pointId ? gpsPoints().find((p) => p.id === pointId) : null;
+    el.gpsModalTitle.textContent = point ? `GPS 기준점 ${gpsPoints().indexOf(point) + 1} 수정` : 'GPS 기준점 추가';
+    el.gpsModalLatLng.value = point ? `${point.lat}, ${point.lng}` : '';
+    el.gpsModalError.textContent = '';
+    el.gpsModalDelete.hidden = !point;
+    el.gpsModal.hidden = false;
+    el.gpsModalLatLng.focus();
+  }
+
+  function closeGpsModal() {
+    el.gpsModal.hidden = true;
+    state.gpsModalPointId = null;
+    state.gpsPendingPct = null;
+  }
+  el.gpsModalCancel.addEventListener('click', closeGpsModal);
+
+  async function saveGpsPoints(points) {
+    const { gpsPoints: saved } = await api(`/api/events/${state.event.id}/gps-points`, {
+      method: 'PUT',
+      body: JSON.stringify({ points }),
+    });
+    state.event.gpsPoints = saved;
+    renderGpsPoints();
+  }
+
+  el.gpsModalSave.addEventListener('click', async () => {
+    const parsed = window.GeoRef.parseLatLng(el.gpsModalLatLng.value);
+    if (!parsed) {
+      el.gpsModalError.textContent = '좌표 형식이 올바르지 않습니다. 예: 35.1702, 128.9712';
+      return;
+    }
+    const current = gpsPoints();
+    const points = state.gpsModalPointId
+      ? current.map((p) => (p.id === state.gpsModalPointId ? { ...p, ...parsed } : p))
+      : [...current, { ...state.gpsPendingPct, ...parsed }];
+    try {
+      await saveGpsPoints(points);
+      closeGpsModal();
+    } catch (err) {
+      el.gpsModalError.textContent = err.message;
+    }
+  });
+
+  el.gpsModalDelete.addEventListener('click', async () => {
+    const id = state.gpsModalPointId;
+    if (!confirm('이 GPS 기준점을 삭제할까요?')) return;
+    try {
+      await saveGpsPoints(gpsPoints().filter((p) => p.id !== id));
+      closeGpsModal();
+    } catch (err) {
+      el.gpsModalError.textContent = err.message;
+    }
+  });
+
+  // ---- 편의시설(주차장/흡연존) ----
+  const FACILITY_LABELS = { parking: '주차장', smoking: '흡연존' };
+  const FACILITY_PLACEHOLDERS = { parking: '예: 제1주차장', smoking: '예: 흡연존 A' };
+
+  function findFacility(id) {
+    return (state.event.facilities || []).find((f) => f.id === id) || null;
+  }
+
+  // 선택/이동 모드에서 주차장/흡연존을 클릭하면 이름 변경/삭제/영역 수정 모달을 연다.
+  // 다른 모드(부스 추가 등)에서는 클릭이 그대로 배치도로 전달되어 그 위에도 부스를 놓을 수 있다.
+  function attachFacilityHandlers() {
+    el.mapOverlay.querySelectorAll('.facility').forEach((g) => {
       g.classList.add('editable');
       g.addEventListener('mousedown', (e) => {
         if (state.mode === 'select' && !(e.shiftKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
@@ -1403,90 +1567,106 @@
       g.addEventListener('click', (e) => {
         if (state.mode !== 'select') return;
         e.stopPropagation();
-        openParkingModal(g.dataset.parkingId, null);
+        openFacilityModal(g.dataset.facilityId, null);
       });
     });
   }
 
-  function openParkingModal(lotId, rect) {
-    state.modalParkingId = lotId;
-    state.pendingParkingRect = rect;
-    const lot = lotId ? (state.event.parkingLots || []).find((p) => p.id === lotId) : null;
-    el.parkingModalTitle.textContent = lot ? '주차장 수정' : '주차장 추가';
-    el.parkingModalName.value = lot ? lot.name : '';
-    el.parkingModalError.textContent = '';
-    el.parkingModalDelete.hidden = !lot;
-    el.parkingModalResize.hidden = !lot;
-    el.parkingModal.hidden = false;
-    el.parkingModalName.focus();
+  // facilityId가 있으면 수정, 없으면 rect 영역으로 state.facilityType 종류를 새로 만든다.
+  function openFacilityModal(facilityId, rect) {
+    state.modalFacilityId = facilityId;
+    state.pendingFacilityRect = rect;
+    const facility = facilityId ? findFacility(facilityId) : null;
+    const type = facility ? facility.type : state.facilityType;
+    const label = FACILITY_LABELS[type];
+    el.facilityModalTitle.textContent = `${label} ${facility ? '수정' : '추가'}`;
+    el.facilityModalNameLabel.textContent = `${label} 이름`;
+    el.facilityModalName.placeholder = FACILITY_PLACEHOLDERS[type];
+    el.facilityModalName.value = facility ? facility.name : type === 'smoking' ? '흡연존' : '';
+    el.facilityModalError.textContent = '';
+    el.facilityModalDelete.hidden = !facility;
+    el.facilityModalResize.hidden = !facility;
+    el.facilityModalAddArea.hidden = !facility;
+    const areaCount = facility ? window.MapRender.facilityRects(facility).length : 0;
+    el.facilityModalAreas.hidden = !facility;
+    el.facilityModalAreas.textContent = `영역 ${areaCount}개 · ㄱ자처럼 꺾인 곳은 "영역 추가"로 사각형을 더 붙이세요.`;
+    el.facilityModal.hidden = false;
+    el.facilityModalName.focus();
   }
 
-  function closeParkingModal() {
-    el.parkingModal.hidden = true;
-    state.modalParkingId = null;
-    state.pendingParkingRect = null;
+  function closeFacilityModal() {
+    el.facilityModal.hidden = true;
+    state.modalFacilityId = null;
+    state.pendingFacilityRect = null;
   }
-  el.parkingModalCancel.addEventListener('click', closeParkingModal);
+  el.facilityModalCancel.addEventListener('click', closeFacilityModal);
 
-  // lotId가 있으면 수정(PATCH), 없으면 새로 만든다(POST).
-  async function saveParkingLot(lotId, fields) {
+  // facilityId가 있으면 수정(PATCH), 없으면 새로 만든다(POST).
+  async function saveFacility(facilityId, fields) {
     try {
-      if (lotId) {
-        const { parkingLot } = await api(`/api/events/${state.event.id}/parking-lots/${lotId}`, {
+      state.event.facilities = state.event.facilities || [];
+      if (facilityId) {
+        const { facility } = await api(`/api/events/${state.event.id}/facilities/${facilityId}`, {
           method: 'PATCH',
           body: JSON.stringify(fields),
         });
-        const idx = state.event.parkingLots.findIndex((p) => p.id === lotId);
-        if (idx !== -1) state.event.parkingLots[idx] = parkingLot;
+        const idx = state.event.facilities.findIndex((f) => f.id === facilityId);
+        if (idx !== -1) state.event.facilities[idx] = facility;
       } else {
-        const { parkingLot } = await api(`/api/events/${state.event.id}/parking-lots`, {
+        const { facility } = await api(`/api/events/${state.event.id}/facilities`, {
           method: 'POST',
           body: JSON.stringify(fields),
         });
-        state.event.parkingLots = state.event.parkingLots || [];
-        state.event.parkingLots.push(parkingLot);
+        state.event.facilities.push(facility);
       }
-      if (state.editingParkingId) {
-        state.editingParkingId = null;
+      if (state.editingFacilityId) {
+        state.editingFacilityId = null;
         setMode('select');
       }
       renderMap();
       return true;
     } catch (err) {
-      if (el.parkingModal.hidden) alert(err.message);
-      else el.parkingModalError.textContent = err.message;
+      if (el.facilityModal.hidden) alert(err.message);
+      else el.facilityModalError.textContent = err.message;
       return false;
     }
   }
 
-  el.parkingModalSave.addEventListener('click', async () => {
-    const name = el.parkingModalName.value.trim();
+  el.facilityModalSave.addEventListener('click', async () => {
+    const name = el.facilityModalName.value.trim();
     if (!name) {
-      el.parkingModalError.textContent = '주차장 이름을 입력해주세요.';
+      el.facilityModalError.textContent = '이름을 입력해주세요.';
       return;
     }
-    const fields = state.modalParkingId ? { name } : { name, rect: state.pendingParkingRect };
-    if (await saveParkingLot(state.modalParkingId, fields)) closeParkingModal();
+    const fields = state.modalFacilityId
+      ? { name }
+      : { type: state.facilityType, name, rects: [state.pendingFacilityRect] };
+    if (await saveFacility(state.modalFacilityId, fields)) closeFacilityModal();
   });
 
-  el.parkingModalResize.addEventListener('click', () => {
-    const lotId = state.modalParkingId;
-    closeParkingModal();
-    state.editingParkingId = lotId;
-    setMode('parking');
-  });
+  function startFacilityDraw(drawMode) {
+    const facility = findFacility(state.modalFacilityId);
+    closeFacilityModal();
+    if (!facility) return;
+    state.facilityType = facility.type;
+    setMode('facility');
+    state.editingFacilityId = facility.id;
+    state.facilityDrawMode = drawMode;
+    setMode('facility');
+  }
+  el.facilityModalResize.addEventListener('click', () => startFacilityDraw('replace'));
+  el.facilityModalAddArea.addEventListener('click', () => startFacilityDraw('add'));
 
-  el.parkingModalDelete.addEventListener('click', async () => {
-    const lotId = state.modalParkingId;
-    const lot = (state.event.parkingLots || []).find((p) => p.id === lotId);
-    if (!lot || !confirm(`주차장 "${lot.name}"을(를) 삭제할까요?`)) return;
+  el.facilityModalDelete.addEventListener('click', async () => {
+    const facility = findFacility(state.modalFacilityId);
+    if (!facility || !confirm(`${FACILITY_LABELS[facility.type]} "${facility.name}"을(를) 삭제할까요?`)) return;
     try {
-      await api(`/api/events/${state.event.id}/parking-lots/${lotId}`, { method: 'DELETE' });
-      state.event.parkingLots = state.event.parkingLots.filter((p) => p.id !== lotId);
-      closeParkingModal();
+      await api(`/api/events/${state.event.id}/facilities/${facility.id}`, { method: 'DELETE' });
+      state.event.facilities = state.event.facilities.filter((f) => f.id !== facility.id);
+      closeFacilityModal();
       renderMap();
     } catch (err) {
-      el.parkingModalError.textContent = err.message;
+      el.facilityModalError.textContent = err.message;
     }
   });
 

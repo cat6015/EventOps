@@ -145,7 +145,7 @@ function applyBoothTransform(markerEl) {
 // 화면 크기/비율이 바뀌면(배치도 이미지 로드, 창 크기 변경 등) 회전 보정값과 글자 배치를 다시 계산한다.
 function refreshOverlayText(svg) {
   svg.querySelectorAll('.booth-marker').forEach(applyBoothTransform);
-  svg.querySelectorAll('.zone-hotspot, .parking-lot').forEach(layoutZoneHotspotLabel);
+  svg.querySelectorAll('.zone-hotspot, .facility').forEach(layoutZoneHotspotLabel);
   svg.querySelectorAll('.entrance-marker text').forEach((t) => applyUprightText(t, 0, 0, 0));
 }
 
@@ -196,7 +196,7 @@ function renderBoothMarker(svg, booth, { editable = false } = {}) {
 function renderBase(svg, event, { editable = false } = {}) {
   clearSvg(svg);
   const markers = new Map();
-  renderParkingLots(svg, event);
+  renderFacilities(svg, event);
   renderEntranceMarker(svg, event.entrance);
   for (const booth of event.booths) {
     markers.set(booth.id, renderBoothMarker(svg, booth, { editable }));
@@ -311,14 +311,49 @@ function renderZoneHotspot(svg, zone, index = 0) {
   return g;
 }
 
-// 주차장: 구역과 구분되도록 회색 계열 실선 영역 + "P 이름" 표시. 클릭해도 구역처럼
-// 화면이 바뀌지 않는다(편집기에서만 눌러서 이름 변경/삭제).
-function renderParkingLot(svg, lot) {
-  if (!lot || !lot.rect) return null;
-  const { xPct, yPct, wPct, hPct } = lot.rect;
-  const g = svgEl('g', { class: 'parking-lot', 'data-parking-id': lot.id });
-  g.dataset.name = `P ${lot.name || ''}`.trim();
-  g.appendChild(svgEl('rect', { x: xPct, y: yPct, width: wPct, height: hPct, rx: 0.6 }));
+function facilityRects(facility) {
+  if (!facility) return [];
+  if (Array.isArray(facility.rects) && facility.rects.length) return facility.rects;
+  return facility.rect ? [facility.rect] : [];
+}
+
+// 편의시설 이름 표시: 주차장은 "P 이름", 흡연존은 이름 그대로(색으로 구분).
+function facilityLabel(facility) {
+  const name = facility.name || '';
+  return facility.type === 'parking' ? `P ${name}`.trim() : name;
+}
+
+// 편의시설(주차장/흡연존): 구역(색색의 점선)과 구분되도록 종류별 고정 색의 실선 영역 + 이름.
+// ㄱ자처럼 사각형 여러 개로 된 곳은 한 덩어리로 보이도록 겹친 부분이 진해지지 않게 칠하고
+// (그룹 전체에 투명도 적용), 테두리는 마스크로 바깥선만 남기며, 이름은 가장 큰 칸에 한 번만 쓴다.
+function renderFacility(svg, facility) {
+  const rects = facilityRects(facility);
+  if (!rects.length) return null;
+  const type = facility.type || 'parking';
+  const g = svgEl('g', {
+    class: `facility facility--${type}`,
+    'data-facility-id': facility.id,
+    'data-facility-type': type,
+  });
+  g.dataset.name = facilityLabel(facility);
+  const largest = rects.reduce((a, b) => (b.wPct * b.hPct > a.wPct * a.hPct ? b : a));
+  const maskId = `facility-mask-${facility.id}`;
+
+  const outline = svgEl('g', { class: 'facility-outline', mask: `url(#${maskId})` });
+  const fill = svgEl('g', { class: 'facility-fill' });
+  const mask = svgEl('mask', { id: maskId, maskUnits: 'userSpaceOnUse', x: -10, y: -10, width: 120, height: 120 });
+  mask.appendChild(svgEl('rect', { x: -10, y: -10, width: 120, height: 120, fill: 'white' }));
+  for (const r of rects) {
+    const attrs = { x: r.xPct, y: r.yPct, width: r.wPct, height: r.hPct };
+    outline.appendChild(svgEl('rect', attrs));
+    fill.appendChild(svgEl('rect', { ...attrs, class: r === largest ? 'label-area' : '' }));
+    mask.appendChild(svgEl('rect', { ...attrs, fill: 'black' }));
+  }
+  const defs = svgEl('defs');
+  defs.appendChild(mask);
+  g.appendChild(defs);
+  g.appendChild(fill);
+  g.appendChild(outline);
   g.appendChild(svgEl('text'));
   svg.appendChild(g);
   layoutZoneHotspotLabel(g);
@@ -326,11 +361,11 @@ function renderParkingLot(svg, lot) {
   return g;
 }
 
-function renderParkingLots(svg, event) {
+function renderFacilities(svg, event) {
   const markers = new Map();
-  for (const lot of event.parkingLots || []) {
-    const g = renderParkingLot(svg, lot);
-    if (g) markers.set(lot.id, g);
+  for (const facility of event.facilities || []) {
+    const g = renderFacility(svg, facility);
+    if (g) markers.set(facility.id, g);
   }
   return markers;
 }
@@ -338,7 +373,7 @@ function renderParkingLots(svg, event) {
 // 구역 이름을 구역 영역 안에 줄바꿈해 배치한다. 지도 보기를 90°/270° 돌리면 화면에서
 // 구역의 가로/세로가 뒤바뀌므로, 그 뒤바뀐 폭/높이 기준으로 줄을 나누고 글자를 똑바로 세운다.
 function layoutZoneHotspotLabel(g) {
-  const rect = g.querySelector('rect');
+  const rect = g.querySelector('rect.label-area') || g.querySelector('rect');
   const text = g.querySelector('text');
   if (!rect || !text) return;
   const xPct = Number(rect.getAttribute('x'));
@@ -370,7 +405,7 @@ function layoutZoneHotspotLabel(g) {
 // 반환값: { boothMarkers, zoneMarkers } (각각 id -> <g> 엘리먼트 맵)
 function renderOverview(svg, event, { editable = false } = {}) {
   clearSvg(svg);
-  renderParkingLots(svg, event);
+  renderFacilities(svg, event);
   const zoneMarkers = new Map();
   const zoneById = new Map();
   (event.zones || []).forEach((zone, index) => {
@@ -492,7 +527,8 @@ window.MapRender = {
   renderEntranceMarker,
   renderBoothMarker,
   renderZoneHotspot,
-  renderParkingLot,
+  renderFacility,
+  facilityRects,
   setBoothMarkerPosition,
   setBoothMarkerRotation,
   normalizeRotation,
