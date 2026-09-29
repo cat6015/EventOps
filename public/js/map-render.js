@@ -48,15 +48,41 @@ function clamp(v, min, max) {
 
 // 부스 크기가 작아져도 테두리가 번호 표시 공간을 다 잡아먹지 않도록,
 // 테두리 두께/모서리 반경/글자 크기를 부스 크기(작은 변 기준)에 비례해 함께 줄인다.
-// 글자 크기는 작은 부스(1~2 크기대)에서도 번호가 잘 보이도록 최소 크기를 넉넉하게 잡았다.
 function boothMarkerMetrics(w, h) {
   const size = Math.min(w, h);
   return {
     strokeWidth: clamp(size * 0.067, 0.06, 0.4),
     ringStrokeWidth: clamp(size * 0.083, 0.08, 0.5),
     rx: clamp(size * 0.133, 0.15, 0.8),
-    fontSize: clamp(size * 0.6, 1.3, 3.6),
   };
+}
+
+// 부스 번호가 부스 칸 밖으로 넘치지 않도록, 칸의 가로(번호 글자 수 반영)/세로에 모두 들어가는
+// 가장 큰 글자 크기를 고른다(너무 큰 부스에서도 과하게 커지지 않게 상한을 둔다).
+const BOOTH_FONT_MAX = 3.6;
+const BOOTH_FONT_MIN = 0.2;
+function fitBoothFontSize(w, h, label) {
+  const widthEm = Math.max(textWidthEm(String(label || '')), 0.6) * 1.08; // 굵은 글씨 여유분
+  return clamp(Math.min((h * 0.75), (w * 0.85) / widthEm), BOOTH_FONT_MIN, BOOTH_FONT_MAX);
+}
+
+// 번호 글자는 회전해도 똑바로 세워 두므로, 회전 후 화면상 "가로로 보이는" 칸 폭/높이에 맞춘다.
+// 90°/270°면 가로세로가 뒤바뀌고(화면 비율 k 반영), 그 밖의 각도는 두 경우 중 작은 쪽으로 잡는다.
+function uprightBoothBox(w, h, deg, k) {
+  const m = deg % 180;
+  const swapped = { w: h / k, h: w * k };
+  if (Math.abs(m) < 1 || Math.abs(m - 180) < 1) return { w, h };
+  if (Math.abs(m - 90) < 1) return swapped;
+  return { w: Math.min(w, swapped.w), h: Math.min(h, swapped.h) };
+}
+
+function updateBoothFontSize(markerEl, deg, k) {
+  const text = markerEl.querySelector('text');
+  if (!text) return;
+  const w = Number(markerEl.dataset.w) || DEFAULT_BOOTH_W;
+  const h = Number(markerEl.dataset.h) || DEFAULT_BOOTH_H;
+  const box = deg ? uprightBoothBox(w, h, deg, k) : { w, h };
+  text.setAttribute('font-size', fitBoothFontSize(box.w, box.h, text.textContent));
 }
 
 // 오버레이는 preserveAspectRatio="none"이라 가로/세로 단위 길이가 화면에서 서로 다르다.
@@ -79,10 +105,12 @@ function applyBoothTransform(markerEl) {
     markerEl.setAttribute('transform', `translate(${x}, ${y})`);
     const text = markerEl.querySelector('text');
     if (text) text.removeAttribute('transform');
+    updateBoothFontSize(markerEl, 0, 1);
     return;
   }
   const k = overlayAspect(markerEl.ownerSVGElement);
   markerEl.setAttribute('transform', `translate(${x}, ${y}) ${rotationTransform(k, deg)}`);
+  updateBoothFontSize(markerEl, deg, k);
   // 부스 번호는 회전과 상관없이 항상 똑바로 읽히도록 반대로 돌려 둔다.
   const text = markerEl.querySelector('text');
   if (text) text.setAttribute('transform', rotationTransform(k, -deg));
@@ -106,12 +134,14 @@ function normalizeRotation(deg) {
 function renderBoothMarker(svg, booth, { editable = false } = {}) {
   const w = booth.wPct || DEFAULT_BOOTH_W;
   const h = booth.hPct || DEFAULT_BOOTH_H;
-  const { strokeWidth, ringStrokeWidth, rx, fontSize } = boothMarkerMetrics(w, h);
+  const { strokeWidth, ringStrokeWidth, rx } = boothMarkerMetrics(w, h);
   const g = svgEl('g', {
     class: editable ? 'booth-marker editor-mode' : 'booth-marker',
     'data-booth-id': booth.id,
     'data-x': booth.xPct,
     'data-y': booth.yPct,
+    'data-w': w,
+    'data-h': h,
     transform: `translate(${booth.xPct}, ${booth.yPct})`,
   });
   const rotation = normalizeRotation(booth.rotation);
@@ -122,14 +152,12 @@ function renderBoothMarker(svg, booth, { editable = false } = {}) {
   g.appendChild(
     svgEl('rect', { class: 'box', x: -w / 2, y: -h / 2, width: w, height: h, rx, 'stroke-width': strokeWidth })
   );
-  const text = svgEl('text', { y: 0.1, 'font-size': fontSize });
+  const text = svgEl('text', { y: 0 });
   text.textContent = booth.number;
   g.appendChild(text);
   svg.appendChild(g);
-  if (rotation) {
-    applyBoothTransform(g);
-    watchOverlayAspect(svg);
-  }
+  applyBoothTransform(g);
+  if (rotation) watchOverlayAspect(svg);
   return g;
 }
 
@@ -304,10 +332,11 @@ function setBoothMarkerRotation(markerEl, deg) {
 }
 
 function setBoothMarkerSize(markerEl, wPct, hPct) {
-  const { strokeWidth, ringStrokeWidth, rx, fontSize } = boothMarkerMetrics(wPct, hPct);
+  const { strokeWidth, ringStrokeWidth, rx } = boothMarkerMetrics(wPct, hPct);
+  markerEl.dataset.w = wPct;
+  markerEl.dataset.h = hPct;
   const ring = markerEl.querySelector('rect.ring');
   const box = markerEl.querySelector('rect.box');
-  const text = markerEl.querySelector('text');
   if (ring) {
     ring.setAttribute('x', -wPct / 2);
     ring.setAttribute('y', -hPct / 2);
@@ -324,7 +353,7 @@ function setBoothMarkerSize(markerEl, wPct, hPct) {
     box.setAttribute('rx', rx);
     box.setAttribute('stroke-width', strokeWidth);
   }
-  if (text) text.setAttribute('font-size', fontSize);
+  applyBoothTransform(markerEl);
 }
 
 function setBoothMarkerSelected(markerEl, selected) {
