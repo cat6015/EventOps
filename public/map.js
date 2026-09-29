@@ -188,9 +188,12 @@
   async function loadEventDetail(eventId) {
     const event = await api(`/api/events/${eventId}`);
     state.event = event;
-    stopMyLocation();
     state.geoTransform = window.GeoRef.buildTransform(event.gpsPoints || []);
     el.myLocationBtn.hidden = !state.geoTransform;
+    // 내 위치는 사용자가 끌 때까지 계속 켜 둔다. 다른 행사로 바꿔도 그 행사에 기준점이 있으면
+    // 추적을 이어가고(새 기준점으로 다시 계산), 없을 때만 끈다.
+    if (!state.geoTransform) stopMyLocation();
+    else if (state.myLocation.watchId !== null) state.myLocation = { ...state.myLocation, pos: null, centered: false };
 
     renderReportBoothOptions();
 
@@ -809,9 +812,15 @@
       navigator.geolocation.clearWatch(state.myLocation.watchId);
     }
     state.myLocation = { watchId: null, pos: null, centered: false };
-    el.myLocationBtn.classList.remove('active');
+    setMyLocationButton(false);
     el.gpsLayer.innerHTML = '';
     setMyLocationStatus('');
+  }
+
+  function setMyLocationButton(on) {
+    el.myLocationBtn.classList.toggle('active', on);
+    el.myLocationBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    el.myLocationBtn.textContent = on ? '📍 내 위치 ON' : '📍 내 위치 OFF';
   }
 
   function startMyLocation() {
@@ -823,14 +832,27 @@
       setMyLocationStatus('이 브라우저는 위치 기능을 지원하지 않습니다.', true);
       return;
     }
-    el.myLocationBtn.classList.add('active');
+    setMyLocationButton(true);
     setMyLocationStatus('위치 찾는 중…');
+    watchMyPosition();
+  }
+
+  // 켜져 있는 동안 휴대폰이 새 위치를 줄 때마다 점을 옮긴다(걸어다니면 계속 따라온다).
+  function watchMyPosition() {
     state.myLocation.watchId = navigator.geolocation.watchPosition(onMyPosition, onMyPositionError, {
       enableHighAccuracy: true,
-      maximumAge: 5000,
+      maximumAge: 3000,
       timeout: 20000,
     });
   }
+
+  // 휴대폰 브라우저는 화면이 꺼지거나 다른 앱으로 가면 위치 추적을 멈추기도 해서,
+  // 켜 둔 상태로 다시 돌아오면 추적을 새로 시작한다(끄기 전까지 계속 따라오도록).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || state.myLocation.watchId === null) return;
+    navigator.geolocation.clearWatch(state.myLocation.watchId);
+    watchMyPosition();
+  });
 
   function onMyPosition(position) {
     if (!state.geoTransform) return;
