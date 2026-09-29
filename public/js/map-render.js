@@ -51,9 +51,9 @@ function clamp(v, min, max) {
 function boothMarkerMetrics(w, h) {
   const size = Math.min(w, h);
   return {
-    strokeWidth: clamp(size * 0.067, 0.06, 0.4),
-    ringStrokeWidth: clamp(size * 0.083, 0.08, 0.5),
-    rx: clamp(size * 0.133, 0.15, 0.8),
+    strokeWidth: clamp(size * 0.067, 0.02, 0.4),
+    ringStrokeWidth: clamp(size * 0.083, 0.03, 0.5),
+    rx: clamp(size * 0.133, 0.03, 0.8),
   };
 }
 
@@ -174,7 +174,8 @@ function renderBase(svg, event, { editable = false } = {}) {
 }
 
 // 구역 rect가 아주 작아 실제 비율로 계산한 크기가 너무 작아지는 경우를 대비한 최소 크기(클릭 가능하도록).
-const OVERVIEW_ZONE_BOOTH_MIN_SIZE = 1;
+// 이 값이 크면 작은 구역의 부스가 실제보다 부풀려져 전체 배치도에서 서로 겹쳐 보이므로 아주 작게 둔다.
+const OVERVIEW_ZONE_BOOTH_MIN_SIZE = 0.15;
 
 // 구역에 속한 부스가 전체 배치도에서 차지할 크기를 계산한다. 부스의 실제 크기(그 구역
 // 상세 배치도 기준 wPct/hPct)에 구역이 전체 배치도에서 차지하는 비율(zone.rect)을 곱해
