@@ -2,6 +2,8 @@
   const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 4;
   const LOCATE_ZOOM = 2;
+  // 구역 화면은 이미 그 구역만 크게 보여주므로, 검색으로 찾아갈 때 덜 확대한다.
+  const ZONE_LOCATE_ZOOM = 1.5;
 
   const state = {
     me: null,
@@ -23,7 +25,10 @@
     otSchedule: null, // OT 계산기(editor.html)에서 저장한 근무 일정 — "지금 근무 중" 계산에 쓴다
     selectedDate: null, // 담당자/근무 현황을 조회할 날짜(YYYY-MM-DD). 기본값은 오늘.
     onboardingFilterOn: false, // "온보딩미진행" 탭이 켜져 있는지 — 켜지면 온보딩 미진행 부스만 지도에 보여준다
-    locatedMarkerEl: null, // 검색으로 찾아가 반짝이는 중인 마커 — 지도 밖 클릭/부스 클릭 전까지 유지된다
+    // 검색으로 찾아가 반짝이는 중인 부스 id — 마커 요소가 아니라 id로 기억해서, 줌/화면 이동/구역 전환으로
+    // 지도가 다시 그려져도 계속 반짝인다. 그 부스의 정보 팝업을 사용자가 닫을 때 꺼진다.
+    locatedBoothId: null,
+    popoverBoothId: null, // 지금 정보 팝업이 가리키는 부스 — 줌/스크롤 시 팝업을 마커 위치로 따라 옮긴다
   };
 
   const el = {
@@ -138,6 +143,7 @@
     state.activeZoneId = null;
     resetZoom();
     closePopover();
+    clearLocatedSparkle();
     await loadEventDetail(eventId);
     await refreshAlerts();
     if (state.socket) {
@@ -351,6 +357,7 @@
       el.mapStage.classList.toggle('wide-zoom', shouldBeWide);
       if (state.currentAspect) fitStageToScreen(state.currentAspect);
     }
+    repositionPopover();
   }
 
   function resetZoom() {
@@ -447,60 +454,62 @@
     requestAnimationFrame(() => afterMapReady(callback, attempts - 1));
   }
 
-  // 배치도 위 특정 위치(xPct, yPct)가 화면 중앙에 오도록 확대하고 스크롤을 이동한다.
-  function scrollToPct(xPct, yPct, zoom) {
-    const stageW = el.mapStage.clientWidth;
-    const stageH = el.mapStage.clientHeight;
-    const contentX = (xPct / 100) * stageW;
-    const contentY = (yPct / 100) * stageH;
+  // 마커가 지도 영역 한가운데 오도록 확대 배율을 맞추고 스크롤한다. 구역 화면(잘라서 확대한
+  // 미리보기 포함)에서도 똑같이 동작하도록 좌표 계산 대신 마커의 실제 화면 위치를 기준으로 삼는다.
+  function centerOnMarker(markerEl, zoom) {
     state.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
     applyZoom();
-    el.mapStage.scrollLeft = contentX * state.zoom - stageW / 2;
-    el.mapStage.scrollTop = contentY * state.zoom - stageH / 2;
+    const r = markerEl.getBoundingClientRect();
+    const stage = el.mapStage.getBoundingClientRect();
+    el.mapStage.scrollLeft += r.left + r.width / 2 - (stage.left + stage.width / 2);
+    el.mapStage.scrollTop += r.top + r.height / 2 - (stage.top + stage.height / 2);
   }
 
-  // 부스 위치로 화면을 이동 + 확대한다. 구역에 속한 부스라도 상세구역 지도가 아니라
-  // 항상 전체 배치도 화면에서 그 위치를 보여주고, 도착하면 마커를 반짝이게 한다
-  // (지도 밖을 클릭하거나 부스를 클릭하기 전까지 계속 반짝인다 — clearLocatedSparkle 참고).
+  // 부스가 속한 구역을 볼 수 있으면(상세 배치도가 있거나 전체 배치도에서 잘라 보여줄 수 있으면)
+  // 그 구역 id를, 아니면 null(전체 배치도)을 돌려준다.
+  function locateZoneIdFor(booth) {
+    if (!booth.zoneId) return null;
+    const zone = (state.event.zones || []).find((z) => z.id === booth.zoneId);
+    if (!zone || booth.zoneXPct == null) return null;
+    const viewable = zone.floorplanImagePath || (zone.rect && state.event.floorplanImagePath);
+    return viewable ? zone.id : null;
+  }
+
+  // 부스 위치로 화면을 이동 + 확대한다. 구역에 속한 부스는 그 구역 화면으로 넘어가서 보여주고,
+  // 도착하면 부스 정보 팝업을 띄우고 마커를 반짝이게 한다. 반짝임은 줌/화면 이동/구역 전환에도
+  // 유지되고, 사용자가 그 정보 팝업을 닫으면 꺼진다(dismissPopover 참고).
   function locateBooth(boothId) {
     if (!state.event) return;
     const booth = state.event.booths.find((b) => b.id === boothId);
     if (!booth || booth.xPct == null) return;
+    clearLocatedSparkle();
     closePopover();
+    const targetZoneId = locateZoneIdFor(booth);
     // "온보딩미진행" 필터가 켜져 있으면 찾는 부스가 화면에 없을 수 있으니 꺼서 전체를 보여준다.
-    if (state.activeZoneId !== null || state.onboardingFilterOn) {
-      switchZoneTab(null);
+    if (state.activeZoneId !== targetZoneId || state.onboardingFilterOn) {
+      switchZoneTab(targetZoneId);
     }
+    state.locatedBoothId = boothId;
+    applyLocatedSparkle();
     afterMapReady(() => {
-      const vb = state.viewBooths.find((b) => b.id === boothId);
-      if (!vb || vb.xPct == null || vb.yPct == null) return;
-      scrollToPct(vb.xPct, vb.yPct, LOCATE_ZOOM);
-      clearLocatedSparkle();
       const markerEl = state.markers.get(boothId);
-      if (markerEl) {
-        markerEl.classList.add('marker--located');
-        state.locatedMarkerEl = markerEl;
-      }
+      if (!markerEl || state.locatedBoothId !== boothId) return;
+      centerOnMarker(markerEl, targetZoneId ? ZONE_LOCATE_ZOOM : LOCATE_ZOOM);
+      applyLocatedSparkle();
+      requestAnimationFrame(() => openPopover(boothId));
     });
   }
 
-  function clearLocatedSparkle() {
-    if (state.locatedMarkerEl) {
-      state.locatedMarkerEl.classList.remove('marker--located');
-      state.locatedMarkerEl = null;
-    }
+  function applyLocatedSparkle() {
+    if (!state.locatedBoothId) return;
+    const markerEl = state.markers.get(state.locatedBoothId);
+    if (markerEl) markerEl.classList.add('marker--located');
   }
 
-  // 지도 밖을 클릭하거나(부스 검색으로 반짝이는 걸 그만 보고 싶을 때) 아무 부스나 클릭하면
-  // (같은 부스를 다시 봐도, 다른 부스를 봐도) 반짝임을 끈다.
-  document.addEventListener('click', (e) => {
-    if (!state.locatedMarkerEl) return;
-    const clickedBoothMarker = e.target.closest('.booth-marker');
-    const clickedInsideMapStage = el.mapStage.contains(e.target);
-    if (clickedBoothMarker || !clickedInsideMapStage) {
-      clearLocatedSparkle();
-    }
-  });
+  function clearLocatedSparkle() {
+    el.mapOverlay.querySelectorAll('.marker--located').forEach((m) => m.classList.remove('marker--located'));
+    state.locatedBoothId = null;
+  }
 
   // 사업자번호는 xxx-xx-xxxxx(하이픈 포함)와 xxxxxxxxxx(숫자만) 둘 다 검색되게, 숫자만 비교한다.
   function digitsOnly(str) {
@@ -692,6 +701,14 @@
       }
     }
     applyAlertsToMap();
+    applyLocatedSparkle();
+    // 구역을 바꾸는 등으로 지도가 다시 그려져도, 찾아간 부스가 이 화면에 있으면 정보 팝업을 다시 띄운다.
+    if (state.locatedBoothId && state.markers.has(state.locatedBoothId)) {
+      const boothId = state.locatedBoothId;
+      afterMapReady(() => {
+        if (state.locatedBoothId === boothId && el.popover.hidden && state.markers.has(boothId)) openPopover(boothId);
+      });
+    }
   }
 
   // 새 A/S 등록 시 짧게 울리는 사이렌풍 알림음(외부 음원 없이 Web Audio로 합성)
@@ -1204,7 +1221,10 @@
     const booth = state.event.booths.find((b) => b.id === boothId);
     if (!booth) return;
     const markerEl = state.markers.get(boothId);
-    const rect = markerEl.getBoundingClientRect();
+    if (!markerEl) return;
+    // 다른 부스를 눌러 그 부스 정보를 보면, 검색으로 찾아갔던 부스의 반짝임은 끈다.
+    if (state.locatedBoothId && state.locatedBoothId !== boothId) clearLocatedSparkle();
+    state.popoverBoothId = boothId;
 
     // 부스 번호만으로는 어느 매장인지 알기 어려우므로 매장명을 제목 아래에 함께 보여준다.
     el.popoverTitle.innerHTML =
@@ -1255,23 +1275,53 @@
       });
     }
 
-    el.popover.style.left = `${rect.left + rect.width / 2}px`;
-    el.popover.style.top = `${rect.top}px`;
     el.popover.hidden = false;
+    repositionPopover();
   }
 
+  // 팝업을 부스 마커 바로 위에 붙인다. 줌/스크롤로 마커가 움직이면 따라가고,
+  // 마커가 지도 영역 밖으로 벗어나 있는 동안에는 잠시 숨긴다.
+  function repositionPopover() {
+    if (!state.popoverBoothId) return;
+    const markerEl = state.markers.get(state.popoverBoothId);
+    if (!markerEl || !markerEl.isConnected) {
+      el.popover.hidden = true;
+      return;
+    }
+    const rect = markerEl.getBoundingClientRect();
+    const stage = el.mapStage.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const visible = cx >= stage.left && cx <= stage.right && cy >= stage.top && cy <= stage.bottom;
+    el.popover.hidden = !visible;
+    el.popover.style.left = `${cx}px`;
+    el.popover.style.top = `${rect.top}px`;
+  }
+  el.mapStage.addEventListener('scroll', repositionPopover, { passive: true });
+  window.addEventListener('resize', repositionPopover);
+  window.addEventListener('scroll', repositionPopover, { passive: true });
+
+  // 화면 전환 등 코드에서 팝업을 치울 때 쓴다(검색 반짝임은 유지).
   function closePopover() {
     el.popover.hidden = true;
+    state.popoverBoothId = null;
   }
-  el.popoverClose.addEventListener('click', closePopover);
+
+  // 사용자가 팝업을 닫을 때 쓴다 — 검색으로 찾아간 부스의 반짝임도 함께 끈다.
+  function dismissPopover() {
+    closePopover();
+    clearLocatedSparkle();
+  }
+  el.popoverClose.addEventListener('click', dismissPopover);
 
   // 팝업이 떠 있을 때 팝업 바깥을 클릭하면 닫는다. 부스 마커 클릭은 그 마커 자신의
   // 클릭 핸들러가 새 팝업을 열므로(전파를 막지 않음) 여기서는 건드리지 않고 지나간다.
+  // 확대/축소 버튼, 구역 탭, 구역 영역, 검색창은 화면만 바꾸는 조작이라 팝업/반짝임을 유지한다.
   document.addEventListener('click', (e) => {
     if (el.popover.hidden) return;
     if (el.popover.contains(e.target)) return;
-    if (e.target.closest('.booth-marker')) return;
-    closePopover();
+    if (e.target.closest('.booth-marker, .zoom-toolbar, .zone-tabs, .zone-hotspot, #booth-locate-search')) return;
+    dismissPopover();
   });
 
   el.popoverStoreInfoToggle.addEventListener('click', () => {
