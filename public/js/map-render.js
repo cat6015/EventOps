@@ -110,12 +110,97 @@ function overviewBoothSize(booth, zone) {
   return { wPct, hPct };
 }
 
-function renderZoneHotspot(svg, zone) {
+// 구역마다 구분되도록 순서대로 돌려 쓰는 색상 팔레트.
+const ZONE_COLORS = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#65a30d', '#ea580c'];
+
+const ZONE_LABEL_MAX_FONT = 2.6;
+const ZONE_LABEL_MIN_FONT = 0.8;
+const ZONE_LABEL_LINE_HEIGHT = 1.2;
+const ZONE_LABEL_PADDING = 0.6;
+
+// SVG <text>는 자동 줄바꿈이 없어서 글자 폭을 어림해 직접 줄을 나눈다.
+// 한글 등 전각 문자는 1em, 영문/숫자는 약 0.6em, 공백은 0.3em으로 계산한다.
+function charWidthEm(ch) {
+  if (ch === ' ') return 0.3;
+  return ch.charCodeAt(0) > 0x2e80 ? 1 : 0.6;
+}
+
+function textWidthEm(str) {
+  let w = 0;
+  for (const ch of str) w += charWidthEm(ch);
+  return w;
+}
+
+// 공백 단위로 먼저 나누고, 한 단어가 한 줄보다 길면 글자 단위로 끊는다.
+function wrapLabel(label, maxWidthEm) {
+  const lines = [];
+  let line = '';
+  const pushWord = (word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (textWidthEm(candidate) <= maxWidthEm) {
+      line = candidate;
+      return;
+    }
+    if (line) lines.push(line);
+    line = '';
+    if (textWidthEm(word) <= maxWidthEm) {
+      line = word;
+      return;
+    }
+    for (const ch of word) {
+      if (line && textWidthEm(line + ch) > maxWidthEm) {
+        lines.push(line);
+        line = '';
+      }
+      line += ch;
+    }
+  };
+  for (const word of String(label).split(/\s+/).filter(Boolean)) pushWord(word);
+  if (line) lines.push(line);
+  return lines;
+}
+
+// 이 크기까지는 단어 중간을 끊지 않고 글자 크기를 줄여 맞춰 본다.
+const ZONE_LABEL_WORD_KEEP_MIN_FONT = 1.6;
+
+// 구역 rect 안에 이름이 다 들어가도록 줄바꿈하고, 그래도 넘치면 글자 크기를 줄인다.
+function layoutZoneLabel(label, wPct, hPct) {
+  const availW = Math.max(wPct - ZONE_LABEL_PADDING * 2, 0.5);
+  const availH = Math.max(hPct - ZONE_LABEL_PADDING * 2, 0.5);
+  const fits = (lines, fontSize) =>
+    lines.length * fontSize * ZONE_LABEL_LINE_HEIGHT <= availH &&
+    lines.every((l) => textWidthEm(l) * fontSize <= availW);
+  const wordsFit = (fontSize) =>
+    String(label).split(/\s+/).every((w) => textWidthEm(w) * fontSize <= availW);
+
+  for (let fontSize = ZONE_LABEL_MAX_FONT; fontSize >= ZONE_LABEL_WORD_KEEP_MIN_FONT; fontSize *= 0.9) {
+    const lines = wrapLabel(label, availW / fontSize);
+    if (wordsFit(fontSize) && fits(lines, fontSize)) return { fontSize, lines };
+  }
+  let fontSize = ZONE_LABEL_MAX_FONT;
+  let lines = wrapLabel(label, availW / fontSize);
+  while (fontSize > ZONE_LABEL_MIN_FONT && !fits(lines, fontSize)) {
+    fontSize = Math.max(ZONE_LABEL_MIN_FONT, fontSize * 0.9);
+    lines = wrapLabel(label, availW / fontSize);
+  }
+  return { fontSize, lines };
+}
+
+function renderZoneHotspot(svg, zone, index = 0) {
   const { xPct, yPct, wPct, hPct } = zone.rect;
-  const g = svgEl('g', { class: 'zone-hotspot', 'data-zone-id': zone.id });
+  const color = ZONE_COLORS[index % ZONE_COLORS.length];
+  const g = svgEl('g', { class: 'zone-hotspot', 'data-zone-id': zone.id, style: `--zone-color: ${color}` });
   g.appendChild(svgEl('rect', { x: xPct, y: yPct, width: wPct, height: hPct, rx: 1 }));
-  const text = svgEl('text', { x: xPct + wPct / 2, y: yPct + hPct / 2 });
-  text.textContent = zone.name;
+  const { fontSize, lines } = layoutZoneLabel(zone.name || '', wPct, hPct);
+  const lineH = fontSize * ZONE_LABEL_LINE_HEIGHT;
+  const cx = xPct + wPct / 2;
+  const firstY = yPct + hPct / 2 - ((lines.length - 1) * lineH) / 2;
+  const text = svgEl('text', { x: cx, y: firstY, 'font-size': fontSize });
+  lines.forEach((l, i) => {
+    const tspan = svgEl('tspan', { x: cx, y: firstY + i * lineH });
+    tspan.textContent = l;
+    text.appendChild(tspan);
+  });
   g.appendChild(text);
   svg.appendChild(g);
   return g;
@@ -129,11 +214,11 @@ function renderOverview(svg, event, { editable = false } = {}) {
   clearSvg(svg);
   const zoneMarkers = new Map();
   const zoneById = new Map();
-  for (const zone of event.zones || []) {
+  (event.zones || []).forEach((zone, index) => {
     zoneById.set(zone.id, zone);
-    if (!zone.rect) continue;
-    zoneMarkers.set(zone.id, renderZoneHotspot(svg, zone));
-  }
+    if (!zone.rect) return;
+    zoneMarkers.set(zone.id, renderZoneHotspot(svg, zone, index));
+  });
   renderEntranceMarker(svg, event.entrance);
   const boothMarkers = new Map();
   for (const booth of event.booths) {

@@ -157,19 +157,25 @@
 .zoom-toolbar .zoom-level { font-size: 0.85rem; color: #6b7280; min-width: 48px; text-align: center; }
 
 .zone-hotspot { cursor: pointer; }
+/* 구역마다 --zone-color(map-render.js에서 지정)로 색을 달리하고, 지도 위에서도 이름이
+   잘 보이도록 영역을 반투명하게 칠하고 글자에 흰 테두리를 두른다 */
 .zone-hotspot rect {
-  fill: rgba(31, 111, 235, 0.1);
-  stroke: #1f6feb;
+  fill: var(--zone-color, #1f6feb);
+  fill-opacity: 0.28;
+  stroke: var(--zone-color, #1f6feb);
   stroke-width: 0.4;
   stroke-dasharray: 1.4 1;
 }
-.zone-hotspot:hover rect { fill: rgba(31, 111, 235, 0.22); }
+.zone-hotspot:hover rect { fill-opacity: 0.42; }
 .zone-hotspot text {
-  fill: #1f6feb;
-  font-size: 2.6px;
+  fill: var(--zone-color, #1f6feb);
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 0.35px;
+  stroke-linejoin: round;
   pointer-events: none;
 }
 
@@ -177,6 +183,7 @@
 .zone-hotspot.has-alert rect {
   stroke: #dc2626;
   stroke-dasharray: none;
+  fill-opacity: 1;
   animation: zone-hotspot-blink 1s ease-in-out infinite;
 }
 .zone-hotspot.has-alert text { fill: #dc2626; }
