@@ -468,7 +468,20 @@
       const naturalW = el.floorplanImg.naturalWidth;
       const naturalH = el.floorplanImg.naturalHeight;
       if (!naturalW || !naturalH) return;
-      const containerWidth = el.mapStage.clientWidth || 1;
+      // 캔버스 높이를 정한 뒤 세로 스크롤바가 생기면 지도 영역 폭이 줄어든다. 예전에는 줄기 전 폭으로
+      // 배치도 이미지 크기를 잡아서, 부스 오버레이(줄어든 캔버스 폭 기준 %)와 이미지가 오른쪽으로 갈수록
+      // 어긋났고 → 구역 화면에서 놓은 부스가 전체 배치도에서는 다른 자리에 나타났다.
+      // 높이를 먼저 적용해 스크롤바 여부를 확정한 뒤의 폭으로 다시 계산하고, 캔버스 폭도 그 값으로
+      // 고정해 이미지와 오버레이가 항상 같은 폭을 기준으로 하도록 한다.
+      el.mapCanvas.style.width = '';
+      let containerWidth = el.mapStage.clientWidth || 1;
+      for (let i = 0; i < 2; i++) {
+        el.mapCanvas.style.height = `${containerWidth * (100 / view.wPct) * (naturalH / naturalW) * (view.hPct / 100)}px`;
+        const measured = el.mapStage.clientWidth || 1;
+        if (measured === containerWidth) break;
+        containerWidth = measured;
+      }
+      el.mapCanvas.style.width = `${containerWidth}px`;
       const fullWidthPx = containerWidth * (100 / view.wPct);
       const fullHeightPx = fullWidthPx * (naturalH / naturalW);
       const containerHeightPx = fullHeightPx * (view.hPct / 100);
@@ -501,6 +514,7 @@
   function clearCropFallback() {
     if (!el.mapCanvas.classList.contains('cropped')) return;
     el.mapCanvas.classList.remove('cropped');
+    el.mapCanvas.style.width = '';
     el.floorplanImg.onload = null;
     el.mapCanvas.style.height = '';
     el.floorplanImg.style.width = '';
