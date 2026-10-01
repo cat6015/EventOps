@@ -47,6 +47,7 @@
     mapBox: document.getElementById('map-box'),
     zoneTabs: document.getElementById('zone-tabs'),
     zoneManageBar: document.getElementById('zone-manage-bar'),
+    zoneFloorplanRemoveBtn: document.getElementById('zone-floorplan-remove-btn'),
     zoneResizeBtn: document.getElementById('zone-resize-btn'),
     zoneFixBoothSizeBtn: document.getElementById('zone-fix-booth-size-btn'),
     zoneDeleteBtn: document.getElementById('zone-delete-btn'),
@@ -342,6 +343,8 @@
       btn.addEventListener('click', () => switchZoneTab(btn.dataset.zoneId || null));
     });
     el.zoneManageBar.hidden = !state.activeZoneId;
+    const activeZone = getActiveZone();
+    el.zoneFloorplanRemoveBtn.hidden = !(activeZone && activeZone.floorplanImagePath);
   }
 
   el.zoneResizeBtn.addEventListener('click', () => {
@@ -1756,6 +1759,29 @@
       renderMap();
     } catch (err) {
       el.zoneFloorplanStatus.textContent = err.message;
+    }
+  });
+
+  // 상세 배치도를 올린 구역은 그 이미지 범위가 구역 영역과 조금만 달라도 전체 배치도와 부스 위치가
+  // 어긋난다. 상세 배치도를 지우면 전체 배치도를 잘라 확대해 보여주므로 두 화면이 항상 일치한다.
+  el.zoneFloorplanRemoveBtn.addEventListener('click', async () => {
+    const zone = getActiveZone();
+    if (!zone || !zone.floorplanImagePath) return;
+    const ok = confirm(
+      `"${zone.name}" 구역의 상세 배치도를 삭제할까요?\n\n` +
+        '삭제하면 이 구역 화면은 전체 배치도를 확대해서 보여주고, 부스 위치가 전체 배치도와 똑같이 맞춰집니다.\n' +
+        '(부스는 지금 전체 배치도에 보이는 위치에 그대로 남습니다.)'
+    );
+    if (!ok) return;
+    try {
+      const { zone: updated } = await api(`/api/events/${state.event.id}/zones/${zone.id}/floorplan`, { method: 'DELETE' });
+      const idx = state.event.zones.findIndex((z) => z.id === zone.id);
+      if (idx !== -1) state.event.zones[idx] = updated;
+      state.zoom = 1;
+      applyZoom();
+      renderMap();
+    } catch (err) {
+      alert(err.message);
     }
   });
 

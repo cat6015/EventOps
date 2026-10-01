@@ -1505,19 +1505,26 @@
       ['VAN', booth.van],
       ['장비 수량', booth.equipmentMemo],
     ].filter(([, v]) => v);
-    el.popoverStoreInfo.innerHTML = infoRows.length
-      ? infoRows
-          .map(([label, v]) => `<div class="store-info-row"><span class="store-info-label">${escapeHtml(label)}</span><span>${escapeHtml(v)}</span></div>`)
-          .join('')
-      : '';
+    // "온보딩완료" 버튼은 부스를 누르자마자 잘못 누르는 일이 없도록, "매장정보 보기"로 펼친
+    // 매장정보 안(맨 아래)에만 둔다. 매장정보가 비어 있어도 온보딩이 필요하면 펼치기 버튼을 보여준다.
+    const needsOnboarding = booth.installStatus === 'onboarding_needed';
+    el.popoverStoreInfo.innerHTML =
+      infoRows
+        .map(([label, v]) => `<div class="store-info-row"><span class="store-info-label">${escapeHtml(label)}</span><span>${escapeHtml(v)}</span></div>`)
+        .join('') +
+      (needsOnboarding
+        ? `<div class="store-info-actions"><button type="button" class="secondary" id="popover-mark-installed-btn">온보딩완료</button></div>`
+        : '');
+    if (needsOnboarding) {
+      document.getElementById('popover-mark-installed-btn').addEventListener('click', () => markBoothInstalled(boothId));
+    }
     // 매장정보는 기본적으로 접어두고, 버튼을 눌러야 펼쳐 보이도록 한다.
     el.popoverStoreInfo.hidden = true;
-    el.popoverStoreInfoToggle.hidden = infoRows.length === 0;
+    el.popoverStoreInfoToggle.hidden = infoRows.length === 0 && !needsOnboarding;
     el.popoverStoreInfoToggle.textContent = '매장정보 보기';
 
-    if (booth.installStatus === 'onboarding_needed') {
-      el.popoverInstallStatus.innerHTML = `<span class="install-status-badge onboarding_needed">온보딩 필요</span><button type="button" class="secondary" id="popover-mark-installed-btn">온보딩완료</button>`;
-      document.getElementById('popover-mark-installed-btn').addEventListener('click', () => markBoothInstalled(boothId));
+    if (needsOnboarding) {
+      el.popoverInstallStatus.innerHTML = `<span class="install-status-badge onboarding_needed">온보딩 필요</span>`;
     } else if (booth.installStatus === 'installed') {
       el.popoverInstallStatus.innerHTML = `<span class="install-status-badge installed">설치완료</span>`;
     } else {
@@ -1574,6 +1581,8 @@
     if (rect.top - gap - h >= margin) top = rect.top - gap - h;
     else if (rect.bottom + gap + h <= vh - margin) top = rect.bottom + gap;
     else top = Math.max(margin, Math.min(rect.top - gap - h, vh - h - margin));
+    // 부스 자체가 화면 위/아래 밖에 걸쳐 있어도(페이지를 아직 안 내린 경우 등) 팝업은 화면 안에 둔다.
+    top = Math.max(margin, Math.min(top, vh - h - margin));
     el.popover.style.left = `${left}px`;
     el.popover.style.top = `${top}px`;
   }

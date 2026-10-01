@@ -325,6 +325,21 @@ router.post('/events/:id/zones/:zoneId/floorplan', requireAdmin, (req, res) => {
   });
 });
 
+// 구역 상세 배치도를 지운다 — 이후 그 구역 화면은 전체 배치도에서 구역 영역을 잘라 확대해 보여준다
+// (이 방식은 전체 배치도와 부스 위치가 항상 정확히 일치한다).
+router.delete('/events/:id/zones/:zoneId/floorplan', requireAdmin, (req, res) => {
+  const event = store.getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });
+  if (!event.zones.some((z) => z.id === req.params.zoneId)) {
+    return res.status(404).json({ error: '구역을 찾을 수 없습니다.' });
+  }
+  const zone = store.setZoneFloorplan(event.id, req.params.zoneId, {
+    floorplanImagePath: null,
+    floorplanOriginalName: null,
+  });
+  res.json({ ok: true, zone });
+});
+
 router.delete('/events/:id/zones/:zoneId', requireAdmin, (req, res) => {
   const event = store.getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: '행사를 찾을 수 없습니다.' });

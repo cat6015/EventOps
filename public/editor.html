@@ -68,6 +68,7 @@
     <div class="inline-form" id="zone-manage-bar" hidden>
       <button class="secondary" id="zone-resize-btn">이 구역 영역(크기/위치) 재설정</button>
       <button class="secondary" id="zone-fix-booth-size-btn" title="전체 배치도에서 이 구역으로 옮겨진 부스가 너무 작거나 크게 보이면 사용하세요">이 구역 부스 크기 재계산</button>
+      <button class="secondary" id="zone-floorplan-remove-btn" hidden title="전체 배치도와 구역 화면의 부스 위치가 안 맞으면, 상세 배치도를 지우고 전체 배치도를 확대해 보는 방식으로 바꾸세요">상세 배치도 삭제(전체 배치도 확대로 보기)</button>
       <button class="danger" id="zone-delete-btn">이 구역 삭제</button>
     </div>
 
@@ -77,10 +78,11 @@
         <button id="zone-floorplan-upload-btn">이 구역의 상세 배치도 업로드</button>
       </div>
       <p class="status-msg" id="zone-floorplan-status"></p>
+      <p class="status-msg">※ 상세 배치도를 올리면 그 이미지가 덮는 범위가 전체 배치도의 구역 영역과 정확히 같아야 두 화면의 부스 위치가 맞습니다. 범위가 조금이라도 다르면 위치가 어긋나니, 특별한 이유가 없으면 올리지 않고 아래의 확대 보기를 쓰는 것을 권장합니다.</p>
     </div>
 
     <div id="map-editor-area" hidden>
-      <p class="status-msg" id="zone-crop-hint" hidden>이 구역의 상세 배치도가 아직 없어 전체 배치도에서 이 구역 영역을 확대해서 보여드리는 중입니다. 정확한 배치도를 쓰려면 위에서 상세 배치도를 업로드해주세요.</p>
+      <p class="status-msg" id="zone-crop-hint" hidden>이 구역은 전체 배치도에서 구역 영역을 확대해서 보여주고 있습니다. 이 방식은 전체 배치도와 부스 위치가 항상 정확히 일치합니다.</p>
       <div class="inline-form">
         <button class="secondary" id="mode-select-btn">선택/이동 모드</button>
         <button class="secondary" id="mode-add-btn">부스 추가 모드</button>
