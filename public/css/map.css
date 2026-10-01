@@ -348,6 +348,29 @@
 .on-duty-panel .on-duty-title { font-weight: 700; color: #1a7f37; }
 .on-duty-panel .staff-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .on-duty-panel .on-duty-assign-btn { font-size: 0.78rem; padding: 4px 10px; }
+.on-duty-panel .on-duty-team-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.on-duty-panel .on-duty-team { flex-shrink: 0; font-weight: 700; color: #1a7f37; white-space: nowrap; }
+.on-duty-panel .on-duty-people {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  min-width: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.on-duty-panel .on-duty-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 2px 4px 2px 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #b7e0c4;
+  border-radius: 999px;
+}
+.on-duty-panel .on-duty-person .on-duty-assign-btn { padding: 2px 8px; border-radius: 999px; }
 
 .active-as-banner {
   display: flex;
@@ -477,17 +500,22 @@
   font-size: 0.85rem;
 }
 
+/* 위치(left/top)는 map.js의 repositionPopover가 화면 안에 들어오도록 계산해 넣는다.
+   휴대폰처럼 좁은 화면에서도 가로가 넘치지 않고, 매장정보를 펼쳐 길어지면 안에서 스크롤된다. */
 .issue-popover {
   position: fixed;
   background: white;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.2);
   padding: 14px;
-  width: 240px;
+  width: min(240px, calc(100vw - 16px));
+  box-sizing: border-box;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 50;
-  transform: translate(-50%, -100%);
-  margin-top: -12px;
 }
+.issue-popover .store-info-row span:last-child { overflow-wrap: anywhere; }
 .issue-popover h3 { margin: 0 0 8px; font-size: 0.95rem; }
 .issue-popover .store-info-toggle-btn {
   display: block;

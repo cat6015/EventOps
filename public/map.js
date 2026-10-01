@@ -1123,12 +1123,25 @@
     const assignLabel = zone ? `${zone.name}에 배치` : '공통으로 배치';
     const title = isToday ? '지금 근무 중' : `${formatDateLabel(dateStr)} 근무 예정 인원`;
 
-    const rows = people
-      .map((p) => {
-        const btn = isAdmin
-          ? `<button type="button" class="secondary on-duty-assign-btn" data-username="${escapeHtml(p.username)}">${escapeHtml(assignLabel)}</button>`
-          : '';
-        return `<div class="staff-row"><span>${escapeHtml(p.displayName)} (${p.team})</span>${btn}</div>`;
+    // 조별로 한 줄씩, 그 조 인원을 줄바꿈 없이 가로로 나열한다(넘치면 그 줄만 옆으로 밀어서 본다).
+    const teams = [];
+    people.forEach((p) => {
+      let team = teams.find((t) => t.name === p.team);
+      if (!team) teams.push((team = { name: p.team, people: [] }));
+      team.people.push(p);
+    });
+    teams.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const rows = teams
+      .map((t) => {
+        const chips = t.people
+          .map((p) => {
+            const btn = isAdmin
+              ? `<button type="button" class="secondary on-duty-assign-btn" data-username="${escapeHtml(p.username)}" title="${escapeHtml(assignLabel)}">${escapeHtml(assignLabel)}</button>`
+              : '';
+            return `<span class="on-duty-person"><span class="on-duty-name">${escapeHtml(p.displayName)}</span>${btn}</span>`;
+          })
+          .join('');
+        return `<div class="on-duty-team-row"><span class="on-duty-team">${escapeHtml(t.name)}</span><div class="on-duty-people">${chips}</div></div>`;
       })
       .join('');
     el.onDutyPanel.innerHTML = `<div class="on-duty-title">${escapeHtml(title)}</div>${rows}`;
@@ -1547,8 +1560,22 @@
     const cy = rect.top + rect.height / 2;
     const visible = cx >= stage.left && cx <= stage.right && cy >= stage.top && cy <= stage.bottom;
     el.popover.hidden = !visible;
-    el.popover.style.left = `${cx}px`;
-    el.popover.style.top = `${rect.top}px`;
+    if (!visible) return;
+    // 기본은 부스 바로 위 가운데. 화면 가장자리라 넘치면 좌우로 밀어 넣고, 위쪽 공간이 모자라면
+    // 부스 아래로, 위아래 모두 모자라면 화면 안에 맞춰(내용은 팝업 안에서 스크롤) 보여준다.
+    const margin = 8;
+    const gap = 10;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = el.popover.offsetWidth;
+    const h = el.popover.offsetHeight;
+    const left = Math.min(Math.max(cx - w / 2, margin), Math.max(margin, vw - w - margin));
+    let top;
+    if (rect.top - gap - h >= margin) top = rect.top - gap - h;
+    else if (rect.bottom + gap + h <= vh - margin) top = rect.bottom + gap;
+    else top = Math.max(margin, Math.min(rect.top - gap - h, vh - h - margin));
+    el.popover.style.left = `${left}px`;
+    el.popover.style.top = `${top}px`;
   }
   el.mapStage.addEventListener('scroll', repositionPopover, { passive: true });
   window.addEventListener('resize', repositionPopover);
@@ -1581,6 +1608,8 @@
     const willShow = el.popoverStoreInfo.hidden;
     el.popoverStoreInfo.hidden = !willShow;
     el.popoverStoreInfoToggle.textContent = willShow ? '매장정보 닫기' : '매장정보 보기';
+    // 매장정보를 펼치면 팝업이 길어지므로 화면 안에 다시 맞춘다.
+    repositionPopover();
   });
 
   el.eventSelect.addEventListener('change', () => selectEvent(el.eventSelect.value));

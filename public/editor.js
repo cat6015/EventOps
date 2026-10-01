@@ -790,15 +790,42 @@
     if (!target) return { zoneId: null, ...ov, wPct: ovW, hPct: ovH };
     if (!target.rect) return { zoneId: target.id, xPct: 50, yPct: 50, ...viewSize };
     const r = target.rect;
-    if (!rectContains(r, ov)) ov = { xPct: r.xPct + r.wPct / 2, yPct: r.yPct + r.hPct / 2 };
     const clampSize = (v) => Math.min(100, Math.max(0.5, v));
+    const wPct = clampSize((ovW * 100) / r.wPct);
+    const hPct = clampSize((ovH * 100) / r.hPct);
+    if (!rectContains(r, ov)) {
+      // 구역 영역 밖을 찍고 이 구역을 고른 경우: 구역 안의 빈자리에 놓는다(여러 개를 넣어도 겹치지 않게).
+      return { zoneId: target.id, ...freeSpotInZone(target, wPct, hPct, null), wPct, hPct };
+    }
     return {
       zoneId: target.id,
       xPct: ((ov.xPct - r.xPct) / r.wPct) * 100,
       yPct: ((ov.yPct - r.yPct) / r.hPct) * 100,
-      wPct: clampSize((ovW * 100) / r.wPct),
-      hPct: clampSize((ovH * 100) / r.hPct),
+      wPct,
+      hPct,
     };
+  }
+
+  // 구역 안(구역 좌표 0~100)에서 크기 w×h 부스가 다른 부스와 겹치지 않는 자리를 찾는다.
+  // 가운데부터 바깥쪽으로 격자를 훑어 처음 비어 있는 칸을 쓰고, 꽉 찼으면 가운데를 돌려준다.
+  function freeSpotInZone(zone, w, h, excludeBoothId) {
+    const others = state.event.booths.filter(
+      (b) => b.zoneId === zone.id && b.id !== excludeBoothId && b.zoneXPct != null && b.zoneYPct != null
+    );
+    const overlaps = (x, y) =>
+      others.some((b) => {
+        const bw = b.wPct || DEFAULT_BOOTH_SIZE;
+        const bh = b.hPct || DEFAULT_BOOTH_SIZE;
+        return Math.abs(b.zoneXPct - x) < (bw + w) / 2 && Math.abs(b.zoneYPct - y) < (bh + h) / 2;
+      });
+    const stepX = Math.max(w * 1.15, 1);
+    const stepY = Math.max(h * 1.15, 1);
+    const candidates = [];
+    for (let y = h / 2 + 0.5; y <= 100 - h / 2; y += stepY) {
+      for (let x = w / 2 + 0.5; x <= 100 - w / 2; x += stepX) candidates.push({ xPct: x, yPct: y });
+    }
+    candidates.sort((a, b) => Math.hypot(a.xPct - 50, a.yPct - 50) - Math.hypot(b.xPct - 50, b.yPct - 50));
+    return candidates.find((c) => !overlaps(c.xPct, c.yPct)) || { xPct: 50, yPct: 50 };
   }
 
   // 전체 배치도에서 구역 영역 안을 클릭해 만들면 그 구역으로 자동 분류한다.
@@ -1738,7 +1765,16 @@
     const zone = findZone(zoneId);
     let pt = booth.xPct === null || booth.xPct === undefined ? null : { xPct: booth.xPct, yPct: booth.yPct };
     if (zone && zone.rect && (!pt || !rectContains(zone.rect, pt))) {
-      pt = { xPct: zone.rect.xPct + zone.rect.wPct / 2, yPct: zone.rect.yPct + zone.rect.hPct / 2 };
+      // 예전에는 영역 밖 부스를 모두 구역 가운데 한 점에 놓아서, 여러 개를 옮기면 한곳에 겹쳐 쏠려 보였다.
+      // 서버가 환산할 새 크기를 미리 계산해 그 크기로 들어갈 빈자리를 찾고, 전체 배치도 좌표로 바꿔 보낸다.
+      const r = zone.rect;
+      const oldZone = findZone(booth.zoneId);
+      const oldScaleW = oldZone && oldZone.rect ? oldZone.rect.wPct / 100 : 1;
+      const oldScaleH = oldZone && oldZone.rect ? oldZone.rect.hPct / 100 : 1;
+      const w = ((booth.wPct || DEFAULT_BOOTH_SIZE) * oldScaleW * 100) / r.wPct;
+      const h = ((booth.hPct || DEFAULT_BOOTH_SIZE) * oldScaleH * 100) / r.hPct;
+      const spot = freeSpotInZone(zone, w, h, booth.id);
+      pt = { xPct: r.xPct + (spot.xPct * r.wPct) / 100, yPct: r.yPct + (spot.yPct * r.hPct) / 100 };
     }
     if (!pt) throw new Error('배치도 위치가 지정되지 않은 부스는 구역 영역이 있는 구역으로만 옮길 수 있습니다.');
     const { booth: moved } = await api(`/api/events/${state.event.id}/booths/${booth.id}/zone`, {
